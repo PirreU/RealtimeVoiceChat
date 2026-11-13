@@ -51,13 +51,17 @@ class WindowsGuiInstallerTests(unittest.TestCase):
             python_executable.touch()
             code_directory = destination / "code"
             code_directory.mkdir()
+            launcher_script = code_directory / "windows_server_launcher.py"
+            launcher_script.touch()
             shortcut_path = destination / "Desktop" / "Real-Time Voice Chat Server.lnk"
 
             def create_shortcut(command, env, **kwargs):
                 script = command[-1]
                 self.assertEqual(env["RVCHAT_SERVER_PYTHON"], str(python_executable))
+                self.assertEqual(env["RVCHAT_SERVER_LAUNCHER"], str(launcher_script))
                 self.assertEqual(env["RVCHAT_SERVER_WORKDIR"], str(code_directory))
-                self.assertIn("$shortcut.Arguments = 'server.py'", script)
+                self.assertIn("$shortcut.TargetPath = $env:RVCHAT_SERVER_PYTHON", script)
+                self.assertIn("$shortcut.Arguments = 'windows_server_launcher.py'", script)
                 self.assertNotIn(".bat", script)
                 shortcut_path.parent.mkdir()
                 shortcut_path.touch()

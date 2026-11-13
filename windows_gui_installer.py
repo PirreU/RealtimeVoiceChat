@@ -93,6 +93,9 @@ def create_server_desktop_shortcut(destination: Path) -> Path:
     icon_path = code_directory / "static" / "favicon.ico"
     if not python_executable.is_file():
         raise FileNotFoundError(f"Managed Python executable is missing: {python_executable}")
+    launcher_script = code_directory / "windows_server_launcher.py"
+    if not launcher_script.is_file():
+        raise FileNotFoundError(f"Server launcher is missing: {launcher_script}")
 
     powershell = shutil.which("powershell.exe")
     if not powershell:
@@ -101,6 +104,7 @@ def create_server_desktop_shortcut(destination: Path) -> Path:
     environment = os.environ.copy()
     environment.update({
         "RVCHAT_SERVER_PYTHON": str(python_executable),
+        "RVCHAT_SERVER_LAUNCHER": str(launcher_script),
         "RVCHAT_SERVER_WORKDIR": str(code_directory),
         "RVCHAT_SERVER_ICON": str(icon_path),
     })
@@ -112,9 +116,9 @@ def create_server_desktop_shortcut(destination: Path) -> Path:
         "$shortcutPath = Join-Path $desktop 'Real-Time Voice Chat Server.lnk'; "
         "$shortcut = $shell.CreateShortcut($shortcutPath); "
         "$shortcut.TargetPath = $env:RVCHAT_SERVER_PYTHON; "
-        "$shortcut.Arguments = 'server.py'; "
+        "$shortcut.Arguments = 'windows_server_launcher.py'; "
         "$shortcut.WorkingDirectory = $env:RVCHAT_SERVER_WORKDIR; "
-        "$shortcut.Description = 'Start the Real-Time Voice Chat server.'; "
+        "$shortcut.Description = 'Start the Real-Time Voice Chat server and keep startup errors visible.'; "
         "$shortcut.IconLocation = $env:RVCHAT_SERVER_ICON + ',0'; "
         "$shortcut.WindowStyle = 1; "
         "$shortcut.Save(); "
@@ -243,6 +247,8 @@ class InstallerApp:
         self.copy_token_button.pack(side="left")
         self.action_button = ttk.Button(button_row, text="Install Server", command=self._start_action)
         self.action_button.pack(side="right")
+        self.close_button = ttk.Button(button_row, text="Close Setup", command=self.root.destroy)
+        self.close_button.pack(side="right", padx=(0, 8))
 
         self._poll_events()
 
@@ -281,6 +287,7 @@ class InstallerApp:
             return
 
         self.action_button.config(state=tk.DISABLED)
+        self.close_button.config(state=tk.DISABLED)
         self.copy_token_button.config(state=tk.DISABLED)
         self.progress.start(12)
         self.status.set("Preparing server installation...")
@@ -495,6 +502,7 @@ class InstallerApp:
                     _, succeeded, destination, error = event
                     self.progress.stop()
                     self.action_button.config(state=tk.NORMAL)
+                    self.close_button.config(state=tk.NORMAL)
                     if succeeded:
                         self.action_button.config(text="Open install folder", command=lambda: os.startfile(destination))
                         self.status.set("Server installation is ready.")
@@ -508,7 +516,8 @@ class InstallerApp:
                             "The server is ready.\n\n"
                             f"Open this URL on the server computer:\nhttps://localhost:8000\n\n"
                             "Start it from the Real-Time Voice Chat Server desktop shortcut. "
-                            "A console window shows server logs; close that window to stop the server. "
+                            "Its console shows startup errors and stays open when the server stops. "
+                            "Press Ctrl+C or close the console window to stop the server. "
                             f"{token_message}\nShare code/data/server-ca.crt only with trusted clients.",
                             parent=self.root,
                         )

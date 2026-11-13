@@ -43,7 +43,7 @@ A sophisticated client-server system built for low-latency interaction:
 If this is your first time using the project, use the server/client installer:
 
 1. On Windows, run `dist\RealTimeVoiceChatInstaller.exe` and choose **Server** or **Client**. On Linux/macOS, run `bash install.sh` and choose a role.
-2. On Windows, start the installed server from the **Real-Time Voice Chat Server** desktop shortcut. A console window shows server logs; close it to stop the server. On Linux/macOS, activate the created environment, change to `code/`, and run `python server.py`.
+2. On Windows, start the installed server from the **Real-Time Voice Chat Server** desktop shortcut. Its console displays startup errors and stays open when the server stops; press Ctrl+C to stop the server, then Enter to close the console. On Linux/macOS, activate the created environment, change to `code/`, and run `python server.py`.
 3. Trust the generated CA certificate, then open `https://localhost:8000` on the server computer. Client devices use the HTTPS URL and access token printed by the server installer.
 
 To build the standalone Windows GUI executable from source, run `build_windows_installer.bat` on a Windows machine with Python 3.11. The server setup downloads a managed Python 3.11 runtime and AI dependencies, so it still requires an internet connection and several GB of disk space.
