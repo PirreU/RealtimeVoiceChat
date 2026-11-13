@@ -1,10 +1,12 @@
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from windows_gui_installer import (
+    _is_vc_redist_x64_installed,
     create_server_desktop_shortcut,
     validate_lan_host,
     validate_server_url,
@@ -42,6 +44,23 @@ class WindowsGuiInstallerTests(unittest.TestCase):
     def test_server_host_accepts_private_ip_and_hostname(self):
         self.assertEqual(validate_lan_host("192.168.1.25"), "192.168.1.25")
         self.assertEqual(validate_lan_host("voicebox.local"), "voicebox.local")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows registry is required")
+    def test_vc_redist_detection_handles_missing_or_installed_runtime(self):
+        import winreg
+
+        with mock.patch("winreg.OpenKey", side_effect=FileNotFoundError):
+            self.assertFalse(_is_vc_redist_x64_installed())
+
+        with (
+            mock.patch("winreg.OpenKey") as open_key,
+            mock.patch("winreg.QueryValueEx", return_value=(1, "v14.0")),
+        ):
+            self.assertTrue(_is_vc_redist_x64_installed())
+            open_key.assert_called_once_with(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+            )
 
     def test_server_shortcut_launches_managed_python_directly(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -11,5 +11,8 @@ python-dotenv
 # Generate HTTPS certificates for LAN server mode
 cryptography
 
+# PyTorch is pinned to 2.5.1 in the Windows installer.
+transformers<5
+
 # OpenAI-compatible LLM providers
 openai

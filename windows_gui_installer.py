@@ -7,7 +7,9 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
+import urllib.request
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -18,11 +20,29 @@ from urllib.parse import urlsplit
 APP_NAME = "Real-Time Voice Chat"
 APP_DIR_NAME = "RealtimeVoiceChat"
 PYTHON_VERSION = "3.11"
+VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 TORCH_PACKAGES = (
     "torch==2.5.1+cu121",
     "torchaudio==2.5.1+cu121",
     "torchvision==0.20.1",
 )
+
+
+def _is_vc_redist_x64_installed() -> bool:
+    try:
+        import winreg
+    except ImportError as error:
+        raise RuntimeError("Windows registry access is required to check the Visual C++ runtime.") from error
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+        ) as key:
+            installed, _ = winreg.QueryValueEx(key, "Installed")
+    except FileNotFoundError:
+        return False
+    return installed == 1
 
 
 def _resource_root() -> Path:
@@ -339,6 +359,8 @@ class InstallerApp:
             for filename in ("setup.py", "requirements.txt"):
                 shutil.copy2(resources / filename, destination / filename)
 
+            self._ensure_vc_redist_x64()
+
             uv_source = resources / "uv.exe"
             if not uv_source.is_file():
                 uv_source = Path(shutil.which("uv") or "")
@@ -421,6 +443,48 @@ class InstallerApp:
             self.events.put(("done", True, str(destination), ""))
         except Exception as error:
             self.events.put(("done", False, str(destination), str(error)))
+
+    def _ensure_vc_redist_x64(self) -> None:
+        if _is_vc_redist_x64_installed():
+            self._append_log("Microsoft Visual C++ Redistributable (x64) is already installed.")
+            return
+
+        powershell = shutil.which("powershell.exe")
+        if not powershell:
+            raise RuntimeError("Windows PowerShell is required to install the Visual C++ runtime.")
+
+        self._set_status("Installing Microsoft Visual C++ Redistributable (x64)...")
+        with tempfile.TemporaryDirectory(prefix="rvchat-vc-redist-") as temporary_directory:
+            installer_path = Path(temporary_directory) / "vc_redist.x64.exe"
+            urllib.request.urlretrieve(VC_REDIST_URL, installer_path)
+            environment = os.environ.copy()
+            environment["RVCHAT_VC_REDIST_PATH"] = str(installer_path)
+            script = (
+                "$ErrorActionPreference = 'Stop'; "
+                "$signature = Get-AuthenticodeSignature -FilePath $env:RVCHAT_VC_REDIST_PATH; "
+                "if ($signature.Status -ne 'Valid' -or "
+                "$signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { "
+                "throw 'The downloaded Visual C++ runtime does not have a valid Microsoft signature.' }; "
+                "$process = Start-Process -FilePath $env:RVCHAT_VC_REDIST_PATH "
+                "-ArgumentList '/install /quiet /norestart' -Verb RunAs -Wait -PassThru; "
+                "exit $process.ExitCode"
+            )
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        if result.returncode not in (0, 3010):
+            details = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+            raise RuntimeError(f"Could not install the Visual C++ runtime: {details}")
+        if result.returncode == 3010:
+            self._append_log("Windows requested a restart to finish installing the Visual C++ runtime.")
+        else:
+            self._append_log("Microsoft Visual C++ Redistributable (x64) installed.")
 
     def _run_command(self, command: list[str], cwd: Path, environment: dict[str, str]) -> list[str]:
         self._append_log("> " + subprocess.list2cmdline(command))

@@ -96,7 +96,7 @@ The installer asks whether this computer will run the AI server or connect as a 
 3. Use the installer for your platform:
     *   **Windows:** Run `dist\RealTimeVoiceChatInstaller.exe`. To build it from source, run `build_windows_installer.bat`.
     *   **Linux/macOS:** Run `bash install.sh`.
-    The standalone Windows client needs no Python installation. The Windows server installer obtains a managed Python runtime and installs the AI dependencies.
+    The standalone Windows client needs no Python installation. The Windows server installer obtains a managed Python runtime, installs the AI dependencies, and installs the Microsoft Visual C++ runtime if needed.
 
 </details>
 
