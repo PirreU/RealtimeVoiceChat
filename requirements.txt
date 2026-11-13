@@ -9,6 +9,5 @@ uvicorn
 # configuration
 python-dotenv
 
-# llm providers
-ollama
+# OpenAI-compatible LLM providers
 openai
