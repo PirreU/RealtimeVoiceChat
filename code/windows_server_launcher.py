@@ -4,11 +4,14 @@ import sys
 import traceback
 from pathlib import Path
 
+import certifi
+
 
 def main() -> None:
     code_directory = Path(__file__).resolve().parent
     os.chdir(code_directory)
     sys.path.insert(0, str(code_directory))
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
     exit_code = 0
 
     try:

@@ -28,6 +28,12 @@ TORCH_PACKAGES = (
 )
 
 
+def _initial_window_geometry(screen_width: int, screen_height: int) -> tuple[int, int, int, int]:
+    width = min(680, max(1, screen_width - 32))
+    height = min(520, max(1, screen_height - 80))
+    return width, height, max(0, (screen_width - width) // 2), max(0, (screen_height - height) // 2)
+
+
 def _is_vc_redist_x64_installed() -> bool:
     try:
         import winreg
@@ -180,41 +186,46 @@ class InstallerApp:
         self.last_token = ""
 
         root.title(f"{APP_NAME} Setup")
-        root.geometry("760x650")
-        root.minsize(700, 580)
+        width, height, x, y = _initial_window_geometry(
+            root.winfo_screenwidth(), root.winfo_screenheight()
+        )
+        root.geometry(f"{width}x{height}+{x}+{y}")
+        root.minsize(min(520, width), min(400, height))
+        wraplength = max(280, width - 48)
+        log_width = max(24, min(60, (width - 48) // 8))
 
-        ttk.Label(root, text="Real-Time Voice Chat", font=("Segoe UI", 18, "bold")).pack(
-            anchor="w", padx=20, pady=(18, 2)
+        ttk.Label(root, text="Real-Time Voice Chat", font=("Segoe UI", 16, "bold")).pack(
+            anchor="w", padx=12, pady=(8, 2)
         )
         ttk.Label(
             root,
             text="Choose how this computer will be used. The client does not install the AI stack.",
-            wraplength=700,
-        ).pack(anchor="w", padx=20, pady=(0, 14))
+            wraplength=wraplength,
+        ).pack(anchor="w", padx=12, pady=(0, 8))
 
         role_frame = ttk.LabelFrame(root, text="This computer is a")
-        role_frame.pack(fill="x", padx=20, pady=(0, 10))
+        role_frame.pack(fill="x", padx=12, pady=(0, 8))
         ttk.Radiobutton(
             role_frame, text="Server — install speech and AI components", variable=self.role,
             value="server", command=self._role_changed,
-        ).pack(anchor="w", padx=12, pady=(8, 2))
+        ).pack(anchor="w", padx=10, pady=(4, 1))
         ttk.Radiobutton(
             role_frame, text="Client — connect to an existing server", variable=self.role,
             value="client", command=self._role_changed,
-        ).pack(anchor="w", padx=12, pady=(2, 8))
+        ).pack(anchor="w", padx=10, pady=(1, 4))
 
         self.server_frame = ttk.LabelFrame(root, text="Server setup")
         ttk.Label(self.server_frame, text="Server LAN IP address or hostname:").grid(
-            row=0, column=0, sticky="w", padx=10, pady=(10, 4)
+            row=0, column=0, sticky="w", padx=8, pady=(6, 3)
         )
         ttk.Entry(self.server_frame, textvariable=self.host).grid(
-            row=1, column=0, sticky="ew", padx=10, pady=(0, 8)
+            row=1, column=0, sticky="ew", padx=8, pady=(0, 5)
         )
         ttk.Label(self.server_frame, text="Install folder:").grid(
-            row=2, column=0, sticky="w", padx=10, pady=(0, 4)
+            row=2, column=0, sticky="w", padx=8, pady=(0, 3)
         )
         path_row = ttk.Frame(self.server_frame)
-        path_row.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 8))
+        path_row.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 5))
         ttk.Entry(path_row, textvariable=self.install_dir).pack(side="left", fill="x", expand=True)
         ttk.Button(path_row, text="Browse...", command=self._browse_folder).pack(side="left", padx=(8, 0))
         ttk.Label(
@@ -223,16 +234,20 @@ class InstallerApp:
                 "The installer downloads a private Python 3.11 runtime and the AI packages. "
                 "This requires an internet connection and several GB of free disk space."
             ),
-            wraplength=680,
-        ).grid(row=4, column=0, sticky="w", padx=10, pady=(0, 10))
+            wraplength=wraplength,
+        ).grid(row=4, column=0, sticky="w", padx=8, pady=(0, 6))
         self.server_frame.columnconfigure(0, weight=1)
 
         self.client_frame = ttk.LabelFrame(root, text="Client setup")
-        ttk.Label(self.client_frame, text="Server HTTPS URL (for example https://192.168.1.25:8000):").pack(
-            anchor="w", padx=10, pady=(10, 4)
+        ttk.Label(
+            self.client_frame,
+            text="Server HTTPS URL (for example https://192.168.1.25:8000):",
+            wraplength=wraplength,
+        ).pack(
+            anchor="w", padx=8, pady=(6, 3)
         )
         ttk.Entry(self.client_frame, textvariable=self.server_url).pack(
-            fill="x", padx=10, pady=(0, 8)
+            fill="x", padx=8, pady=(0, 5)
         )
         ttk.Label(
             self.client_frame,
@@ -240,27 +255,29 @@ class InstallerApp:
                 "Ask the server administrator for the CA certificate and access token. "
                 "Trust the certificate on this device before connecting."
             ),
-            wraplength=680,
-        ).pack(anchor="w", padx=10, pady=(0, 6))
+            wraplength=wraplength,
+        ).pack(anchor="w", padx=8, pady=(0, 4))
         ttk.Checkbutton(
             self.client_frame,
             text="I have trusted the server's CA certificate on this device",
             variable=self.trusted_ca,
-        ).pack(anchor="w", padx=10, pady=(0, 10))
+        ).pack(anchor="w", padx=8, pady=(0, 6))
 
-        self.server_frame.pack(fill="x", padx=20, pady=(0, 10))
+        self.server_frame.pack(fill="x", padx=12, pady=(0, 8))
         self.client_frame.pack_forget()
 
         self.progress = ttk.Progressbar(root, mode="indeterminate")
-        self.progress.pack(fill="x", padx=20, pady=(2, 6))
+        self.progress.pack(fill="x", padx=12, pady=(2, 4))
         self.status = tk.StringVar(value="Ready")
-        ttk.Label(root, textvariable=self.status).pack(anchor="w", padx=20, pady=(0, 4))
+        ttk.Label(root, textvariable=self.status).pack(anchor="w", padx=12, pady=(0, 2))
 
-        self.log = scrolledtext.ScrolledText(root, height=12, wrap=tk.WORD, state=tk.DISABLED)
-        self.log.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+        self.log = scrolledtext.ScrolledText(
+            root, width=log_width, height=4, wrap=tk.WORD, state=tk.DISABLED
+        )
+        self.log.pack(fill="both", expand=True, padx=12, pady=(0, 4))
 
         button_row = ttk.Frame(root)
-        button_row.pack(fill="x", padx=20, pady=(0, 16))
+        button_row.pack(fill="x", side="bottom", padx=12, pady=(0, 8))
         self.copy_token_button = ttk.Button(
             button_row, text="Copy access token", command=self._copy_token, state=tk.DISABLED
         )
@@ -413,6 +430,15 @@ class InstallerApp:
                 [
                     str(uv_executable), "pip", "install", "--python", str(python_executable),
                     "-r", str(destination / "requirements.txt"),
+                ],
+                destination,
+                environment,
+            )
+            self._set_status("Checking Coqui XTTS dependencies...")
+            self._run_command(
+                [
+                    str(python_executable), "-c",
+                    "from TTS.tts.layers.xtts.stream_generator import NewGenerationMixin",
                 ],
                 destination,
                 environment,

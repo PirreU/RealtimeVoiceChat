@@ -8,11 +8,12 @@ uvicorn
 
 # configuration
 python-dotenv
+certifi
 # Generate HTTPS certificates for LAN server mode
 cryptography
 
-# PyTorch is pinned to 2.5.1 in the Windows installer.
-transformers<5
+# Coqui TTS 0.26 requires Transformers >=4.47 and imports BeamSearchScorer from its root package.
+transformers>=4.47,<4.54
 
 # OpenAI-compatible LLM providers
 openai

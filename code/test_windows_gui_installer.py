@@ -7,6 +7,7 @@ from unittest import mock
 
 from windows_gui_installer import (
     _is_vc_redist_x64_installed,
+    _initial_window_geometry,
     create_server_desktop_shortcut,
     validate_lan_host,
     validate_server_url,
@@ -44,6 +45,18 @@ class WindowsGuiInstallerTests(unittest.TestCase):
     def test_server_host_accepts_private_ip_and_hostname(self):
         self.assertEqual(validate_lan_host("192.168.1.25"), "192.168.1.25")
         self.assertEqual(validate_lan_host("voicebox.local"), "voicebox.local")
+
+    def test_initial_window_geometry_fits_short_screen(self):
+        width, height, x, y = _initial_window_geometry(800, 600)
+        self.assertEqual((width, height), (680, 520))
+        self.assertLessEqual(x + width, 800)
+        self.assertLessEqual(y + height, 600)
+
+        width, height, x, y = _initial_window_geometry(640, 480)
+        self.assertLessEqual(width, 640)
+        self.assertLessEqual(height, 480)
+        self.assertGreaterEqual(x, 0)
+        self.assertGreaterEqual(y, 0)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows registry is required")
     def test_vc_redist_detection_handles_missing_or_installed_runtime(self):
