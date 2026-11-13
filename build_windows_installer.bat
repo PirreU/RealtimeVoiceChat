@@ -8,6 +8,12 @@ if not exist "%BUILD_ENV%\Scripts\python.exe" (
     if errorlevel 1 exit /b 1
 )
 
+"%BUILD_ENV%\Scripts\python.exe" -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 11) else 1)"
+if errorlevel 1 (
+    echo The installer builder requires Python 3.11.
+    exit /b 1
+)
+
 "%BUILD_ENV%\Scripts\python.exe" -m pip install --upgrade pip
 if errorlevel 1 exit /b 1
 "%BUILD_ENV%\Scripts\python.exe" -m pip install -r requirements-windows-installer-build.txt
@@ -19,6 +25,7 @@ if errorlevel 1 exit /b 1
     --distpath "%~dp0dist" ^
     --workpath "%TEMP%\rvchat-installer-pyinstaller-work" ^
     --specpath "%TEMP%\rvchat-installer-pyinstaller-spec" ^
+    --icon "%~dp0code\static\favicon.ico" ^
     --add-data "%~dp0code;code" ^
     --add-data "%~dp0requirements.txt;." ^
     --add-data "%~dp0setup.py;." ^

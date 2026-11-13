@@ -43,7 +43,7 @@ def default_lan_host() -> str:
 
 def validate_lan_host(value: str) -> str:
     host = value.strip()
-    if not host or any(character.isspace() for character in host):
+    if not host or host.casefold() == "localhost" or any(character.isspace() for character in host):
         raise ValueError("Enter the server's LAN IP address or hostname.")
     try:
         address = ipaddress.ip_address(host)
@@ -68,9 +68,12 @@ def validate_server_url(value: str) -> str:
         port = parsed.port
     except ValueError as error:
         raise ValueError("Enter a valid HTTPS server URL and port.") from error
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("The server URL port must be between 1 and 65535.")
     if (
         parsed.scheme.lower() != "https"
         or not parsed.hostname
+        or any(character.isspace() for character in parsed.hostname)
         or parsed.username
         or parsed.password
         or parsed.path not in {"", "/"}
@@ -81,7 +84,7 @@ def validate_server_url(value: str) -> str:
     host = parsed.hostname
     if ":" in host:
         host = f"[{host}]"
-    return f"https://{host}:{port or 8000}"
+    return f"https://{host}:{8000 if port is None else port}"
 
 
 class InstallerApp:
@@ -289,6 +292,7 @@ class InstallerApp:
             cache_dir = destination / ".uv-cache"
             environment = os.environ.copy()
             environment["UV_PYTHON_INSTALL_DIR"] = str(python_dir)
+            environment["UV_PYTHON_BIN_DIR"] = str(destination / "runtime-bin")
             environment["UV_CACHE_DIR"] = str(cache_dir)
             environment["UV_NO_PROGRESS"] = "1"
 
@@ -345,6 +349,12 @@ class InstallerApp:
                 self._set_result(host, setup_output, destination)
             else:
                 self._set_result(host, [], destination)
+            try:
+                shutil.rmtree(cache_dir)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                self._append_log(f"Could not remove temporary package cache: {error}")
             self.events.put(("done", True, str(destination), ""))
         except Exception as error:
             self.events.put(("done", False, str(destination), str(error)))
@@ -361,6 +371,7 @@ class InstallerApp:
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         output = []
         assert process.stdout is not None
@@ -389,6 +400,14 @@ class InstallerApp:
         if token:
             self.last_token = token
             self.events.put(("token", token))
+        else:
+            config_path = destination / "code" / "data" / "server.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            host = config.get("lan_host", host)
+            self._append_log(
+                "Existing server credentials were preserved. The saved token cannot be recovered; "
+                "run setup.py --configure-server to generate new credentials if it was lost."
+            )
         formatted_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
         url = f"https://{formatted_host}:8000"
         ca_path = destination / "code" / "data" / "server-ca.crt"
@@ -433,12 +452,17 @@ class InstallerApp:
                     if succeeded:
                         self.action_button.config(text="Open install folder", command=lambda: os.startfile(destination))
                         self.status.set("Server installation is ready.")
+                        token_message = (
+                            "Copy the access token from the log and share it only with trusted clients."
+                            if self.last_token
+                            else "The previous access token was preserved but cannot be displayed again."
+                        )
                         messagebox.showinfo(
                             "Installation complete",
                             "The server is ready.\n\n"
                             f"Open this URL on the server computer:\nhttps://localhost:8000\n\n"
-                            "Start it with Start Server.bat. Share the displayed access token and "
-                            "code/data/server-ca.crt only with trusted clients.",
+                            "Start it with Start Server.bat. "
+                            f"{token_message}\nShare code/data/server-ca.crt only with trusted clients.",
                             parent=self.root,
                         )
                     else:

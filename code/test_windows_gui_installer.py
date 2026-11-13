@@ -17,12 +17,17 @@ class WindowsGuiInstallerTests(unittest.TestCase):
         )
 
     def test_server_url_rejects_non_https_and_embedded_paths(self):
-        for value in ("http://voicebox.local:8000", "https://user@voicebox.local:8000", "https://voicebox.local/chat"):
+        for value in (
+            "http://voicebox.local:8000",
+            "https://user@voicebox.local:8000",
+            "https://voicebox.local/chat",
+            "https://voicebox.local:0",
+        ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_server_url(value)
 
     def test_server_host_rejects_loopback_and_wildcard(self):
-        for value in ("127.0.0.1", "::1", "0.0.0.0", "bad host"):
+        for value in ("127.0.0.1", "::1", "0.0.0.0", "localhost", "bad host"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_lan_host(value)
 
