@@ -1047,8 +1047,6 @@ async def websocket_endpoint(ws: WebSocket):
 if __name__ == "__main__":
     server_config = load_server_config()
     host = server_config["bind_host"]
-    if os.getenv("RUNNING_IN_DOCKER", "").lower() == "true":
-        host = "0.0.0.0"
     uvicorn_options = {
         "host": host,
         "port": server_config["port"],

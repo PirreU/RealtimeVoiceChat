@@ -38,24 +38,19 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Flexible AI Brains:** Pluggable LLM backends (Ollama default, OpenAI support via `llm_module.py`).
 *   **Customizable Voices:** Choose from different Text-to-Speech engines (Kokoro, Coqui, Orpheus via `audio_module.py`).
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
-*   **Dockerized Deployment:** Recommended setup using Docker Compose for easier dependency management.
-
 ## Quick Start 🧭
 
-If this is your first time using the project, the easiest path is:
+If this is your first time using the project, use the server/client installer:
 
-1. Install the dependencies with Docker or the Windows setup script.
-2. Start the app with `docker compose up -d` or `python server.py` inside `code/`.
-3. Open `http://localhost:8000`, allow microphone access, then press **Start**.
-
-You do not need to change the code to try it out. If the app does not respond, check the browser permission prompt and confirm your model and TTS settings are available.
+1. Run `install.bat` on Windows or `bash install.sh` on Linux/macOS, then choose **Server** on the AI computer or **Client** on another device.
+2. On the server, activate the created environment, change to `code/`, and run `python server.py`.
+3. On the server computer, open `http://localhost:8000`. A client device uses the HTTPS URL configured by the server installer.
 
 ## Technology Stack 🛠️
 
 *   **Backend:** Python < 3.13, FastAPI
 *   **Frontend:** HTML, CSS, JavaScript (Vanilla JS, Web Audio API, AudioWorklets)
 *   **Communication:** WebSockets
-*   **Containerization:** Docker, Docker Compose
 *   **Core AI/ML Libraries:**
     *   `RealtimeSTT` (Speech-to-Text)
     *   `RealtimeTTS` (Text-to-Speech)
@@ -69,15 +64,12 @@ You do not need to change the code to try it out. If the app does not respond, c
 This project leverages powerful AI models, which have some requirements:
 
 *   **Operating System:**
-    *   **Docker:** Linux is recommended for the best GPU integration with Docker.
-    *   **Manual:** The provided script (`install.bat`) is for Windows. Manual steps are possible on Linux/macOS but may require more troubleshooting (especially for DeepSpeed).
+    *   **Native installer:** `install.bat` is for Windows; `install.sh` is for Linux/macOS.
 *   **🐍 Python:** 3.9 or higher (if setting up manually).
 *   **🚀 GPU:** **A powerful CUDA-enabled NVIDIA GPU is *highly recommended***, especially for faster STT (Whisper) and TTS (Coqui). Performance on CPU-only or weaker GPUs will be significantly slower.
     *   The setup assumes **CUDA 12.1**. Adjust PyTorch installation if you have a different CUDA version.
-    *   **Docker (Linux):** Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-*   **🐳 Docker (Optional but Recommended):** Docker Engine and Docker Compose v2+ for the containerized setup.
-*   **🧠 Ollama (Optional):** If using the Ollama backend *without* Docker, install it separately and pull your desired models. The Docker setup includes an Ollama service.
-*   **🔑 OpenAI API Key (Optional):** If using the OpenAI backend, set the `OPENAI_API_KEY` environment variable (e.g., in a `.env` file or passed to Docker).
+*   **🧠 Ollama (Optional):** Install Ollama separately if you choose that backend.
+*   **🔑 OpenAI API Key (Optional):** If using the OpenAI backend, set the `OPENAI_API_KEY` environment variable before starting the application.
 
 ---
 
@@ -93,57 +85,9 @@ cd RealtimeVoiceChat
 Now, choose your adventure:
 
 <details>
-<summary><strong>🚀 Option A: Docker Installation (Recommended for Linux/GPU)</strong></summary>
+<summary><strong>🛠️ Recommended: Server/Client Installer (Windows, Linux, and macOS)</strong></summary>
 
-This is the most straightforward method, bundling the application, dependencies, and even Ollama into manageable containers.
-
-1.  **Build the Docker images:**
-    *(This takes time! It downloads base images, installs Python/ML dependencies, and pre-downloads the default STT model.)*
-    ```bash
-    docker compose build
-    ```
-    *(If you want to customize models/settings in `code/*.py`, do it **before** this step!)*
-
-2.  **Start the services (App & Ollama):**
-    *(Runs containers in the background. GPU access is configured in `docker-compose.yml`.)*
-    ```bash
-    docker compose up -d
-    ```
-    Give them a minute to initialize.
-
-3.  **(Crucial!) Pull your desired Ollama Model:**
-    *(This is done *after* startup to keep the main app image smaller and allow model changes without rebuilding. Execute this command to pull the default model into the running Ollama container.)*
-    ```bash
-    # Pull the default model (adjust if you configured a different one in server.py)
-    docker compose exec ollama ollama pull hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M
-
-    # (Optional) Verify the model is available
-    docker compose exec ollama ollama list
-    ```
-
-4.  **Stopping the Services:**
-    ```bash
-    docker compose down
-    ```
-
-5.  **Restarting:**
-    ```bash
-    docker compose up -d
-    ```
-
-6.  **Viewing Logs / Debugging:**
-    *   Follow app logs: `docker compose logs -f app`
-    *   Follow Ollama logs: `docker compose logs -f ollama`
-    *   Save logs to file: `docker compose logs app > app_logs.txt`
-
-</details>
-
-<details>
-<summary><strong>🛠️ Option B: Manual Installation (Windows Script / venv)</strong></summary>
-
-This method requires managing the Python environment yourself. It offers more direct control but can be trickier, especially regarding ML dependencies.
-
-**B1) Using the Server/Client Installer:**
+The installer asks whether this computer will run the AI server or connect as a lightweight client. The client does not install the AI stack.
 
 1. Choose **Server** on the computer that will run speech processing and the AI stack. Choose **Client** on other devices; client setup opens the server in a browser and does not install AI dependencies.
 2. Server setup creates a private-LAN HTTPS certificate and a one-time access token. Keep the token private. Copy `code/data/server-ca.crt` to each client device and add it to that device's trusted certificate authorities before opening the client URL. On Windows, allow Python through the firewall for private networks if prompted.
@@ -156,7 +100,10 @@ This method requires managing the Python environment yourself. It offers more di
     ```
     The server installer installs the AI dependencies. The client option only needs Python to open the server URL.
 
-**B2) Manual Server Installation (Linux/macOS/Windows):**
+</details>
+
+<details>
+<summary><strong>🧰 Advanced: Manual Server Installation (Linux/macOS/Windows)</strong></summary>
 
 1.  **Create & Activate Virtual Environment:**
     ```bash
@@ -207,12 +154,9 @@ This method requires managing the Python environment yourself. It offers more di
 
 ## Running the Application ▶️
 
-**If using Docker:**
-Your application is already running via `docker compose up -d`! Check logs using `docker compose logs -f app`.
+**Start the server:**
 
-**If using Manual/Script Installation:**
-
-1.  **Activate your virtual environment** (if not already active):
+1.  **Activate the server virtual environment** (if not already active):
     ```bash
     # Linux/macOS: source ../venv/bin/activate
     # Windows: ..\venv\Scripts\activate
@@ -228,7 +172,7 @@ Your application is already running via `docker compose up -d`! Check logs using
 
 **Accessing the Client:**
 
-1.  For a local-only installation, open `http://localhost:8000`. For Docker, open `http://localhost:8000` on the host running Docker.
+1.  For a local-only installation, open `http://localhost:8000`.
 2.  **Grant microphone permissions** when prompted.
 3.  Click **"Start"** to begin chatting! Use "Stop" to end and "Reset" to clear the conversation.
 
@@ -242,7 +186,7 @@ For a configured LAN server, use its `https://<server-ip>:8000` URL instead. The
 
 Open **Settings** in the web interface to choose the AI provider and model, configure its endpoint, select the speech engine and voice, adjust speech speed, choose the transcription language and model, and customize the assistant prompt. Local LLM choices include Ollama, LM Studio, and other servers that provide an OpenAI-compatible API, such as llama.cpp server.
 
-Settings are saved locally in `code/data/settings.json` (or in the persistent `app_settings` Docker volume). Changes take effect after restarting the application. For Docker, restart with `docker compose restart app`.
+Settings are saved locally in `code/data/settings.json`. Changes take effect after restarting the application.
 
 API keys are not stored in the settings file. Set `OPENAI_API_KEY` in the environment before starting the application when using the OpenAI provider. Ollama models must be available to the selected Ollama service; pull any missing model before restarting.
 

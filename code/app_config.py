@@ -11,9 +11,7 @@ from pydantic import BaseModel, Field
 
 
 _CODE_DIR = Path(__file__).resolve().parent
-_SETTINGS_PATH = Path(
-    os.environ.get("APP_SETTINGS_PATH", str(_CODE_DIR / "data" / "settings.json"))
-)
+_SETTINGS_PATH = _CODE_DIR / "data" / "settings.json"
 _SETTINGS_LOCK = threading.Lock()
 
 
