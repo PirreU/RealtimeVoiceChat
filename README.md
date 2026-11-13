@@ -184,7 +184,7 @@ For a configured LAN server, use its `https://<server-ip>:8000` URL instead. The
 
 Open **Settings** in the web interface to choose the AI provider and model, configure its endpoint, select the speech engine and voice, adjust speech speed, choose the transcription language and model, and customize the assistant prompt. Local LLM choices include Ollama, LM Studio, and other servers that provide an OpenAI-compatible API, such as llama.cpp server.
 
-Settings are saved locally in `code/data/settings.json`. Changes take effect after restarting the application.
+AI settings are saved locally in `code/data/settings.json`. Changes take effect after restarting the application. The Light, Dark, and device theme choices are applied immediately and saved in the current browser.
 
 API keys are not stored in the settings file. Set `OPENAI_API_KEY` in the environment before starting the application when using the OpenAI provider. Ollama models must be available to the selected Ollama service; pull any missing model before restarting.
 

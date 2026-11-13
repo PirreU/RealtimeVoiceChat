@@ -25,12 +25,55 @@ const settingsOverlay = document.getElementById("settingsOverlay");
 const settingsForm = document.getElementById("settingsForm");
 const settingsFeedback = document.getElementById("settingsFeedback");
 const settingsRestartNotice = document.getElementById("settingsRestartNotice");
+const themePreferenceSelect = document.getElementById("themePreference");
+const themeFeedback = document.getElementById("themeFeedback");
 const ttsEngineSelect = document.getElementById("ttsEngine");
 const ttsVoiceInput = document.getElementById("ttsVoice");
 const ttsSpeedInput = document.getElementById("ttsSpeed");
 const turnSpeedInput = document.getElementById("turnSpeed");
 const llmProviderSelect = document.getElementById("llmProvider");
 const llmBaseUrlInput = document.getElementById("llmBaseUrl");
+
+const THEME_STORAGE_KEY = "rvchatThemePreference";
+const THEME_PREFERENCES = ["system", "light", "dark"];
+let themePreference = "system";
+
+function getSavedThemePreference() {
+  try {
+    const savedPreference = localStorage.getItem(THEME_STORAGE_KEY);
+    return THEME_PREFERENCES.includes(savedPreference) ? savedPreference : "system";
+  } catch (error) {
+    console.error("Could not read the saved theme preference:", error);
+    return "system";
+  }
+}
+
+function applyThemePreference(preference) {
+  const useDarkTheme = preference === "dark"
+    || (preference === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = useDarkTheme ? "dark" : "light";
+}
+
+themePreference = getSavedThemePreference();
+themePreferenceSelect.value = themePreference;
+applyThemePreference(themePreference);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (themePreference === "system") {
+    applyThemePreference(themePreference);
+  }
+});
+
+themePreferenceSelect.addEventListener("change", () => {
+  themePreference = themePreferenceSelect.value;
+  applyThemePreference(themePreference);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, themePreference);
+    themeFeedback.textContent = "Theme saved in this browser.";
+  } catch (error) {
+    themeFeedback.textContent = "Theme changed, but could not be saved in this browser.";
+    console.error("Could not save the theme preference:", error);
+  }
+});
 
 function setStatus(message, state = "idle") {
   statusDiv.textContent = message;
