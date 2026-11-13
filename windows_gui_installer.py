@@ -87,6 +87,61 @@ def validate_server_url(value: str) -> str:
     return f"https://{host}:{8000 if port is None else port}"
 
 
+def create_server_desktop_shortcut(destination: Path) -> Path:
+    python_executable = destination / "venv" / "Scripts" / "python.exe"
+    code_directory = destination / "code"
+    icon_path = code_directory / "static" / "favicon.ico"
+    if not python_executable.is_file():
+        raise FileNotFoundError(f"Managed Python executable is missing: {python_executable}")
+
+    powershell = shutil.which("powershell.exe")
+    if not powershell:
+        raise RuntimeError("Windows PowerShell is required to create the server desktop shortcut.")
+
+    environment = os.environ.copy()
+    environment.update({
+        "RVCHAT_SERVER_PYTHON": str(python_executable),
+        "RVCHAT_SERVER_WORKDIR": str(code_directory),
+        "RVCHAT_SERVER_ICON": str(icon_path),
+    })
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$shell = New-Object -ComObject WScript.Shell; "
+        "$desktop = [Environment]::GetFolderPath('Desktop'); "
+        "if ([string]::IsNullOrWhiteSpace($desktop)) { throw 'Could not locate the Desktop folder.' }; "
+        "$shortcutPath = Join-Path $desktop 'Real-Time Voice Chat Server.lnk'; "
+        "$shortcut = $shell.CreateShortcut($shortcutPath); "
+        "$shortcut.TargetPath = $env:RVCHAT_SERVER_PYTHON; "
+        "$shortcut.Arguments = 'server.py'; "
+        "$shortcut.WorkingDirectory = $env:RVCHAT_SERVER_WORKDIR; "
+        "$shortcut.Description = 'Start the Real-Time Voice Chat server.'; "
+        "$shortcut.IconLocation = $env:RVCHAT_SERVER_ICON + ',0'; "
+        "$shortcut.WindowStyle = 1; "
+        "$shortcut.Save(); "
+        "Write-Output $shortcutPath"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if result.returncode:
+        details = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+        raise RuntimeError(f"Could not create the server desktop shortcut: {details}")
+
+    output_lines = result.stdout.strip().splitlines()
+    if not output_lines:
+        raise RuntimeError("PowerShell did not return the server desktop shortcut path.")
+    shortcut_path = Path(output_lines[-1])
+    if not shortcut_path.is_file():
+        raise RuntimeError(f"Server desktop shortcut was not created: {shortcut_path}")
+    return shortcut_path
+
+
 class InstallerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -276,7 +331,6 @@ class InstallerApp:
             )
             for filename in ("setup.py", "requirements.txt"):
                 shutil.copy2(resources / filename, destination / filename)
-            self._write_server_launcher(destination)
 
             uv_source = resources / "uv.exe"
             if not uv_source.is_file():
@@ -349,6 +403,8 @@ class InstallerApp:
                 self._set_result(host, setup_output, destination)
             else:
                 self._set_result(host, [], destination)
+            shortcut_path = create_server_desktop_shortcut(destination)
+            self._append_log(f"Desktop shortcut created: {shortcut_path}")
             try:
                 shutil.rmtree(cache_dir)
             except FileNotFoundError:
@@ -413,17 +469,7 @@ class InstallerApp:
         ca_path = destination / "code" / "data" / "server-ca.crt"
         self._append_log(f"Server URL: {url}")
         self._append_log(f"CA certificate: {ca_path}")
-        self._append_log("Start the server with Start Server.bat in the installation folder.")
-
-    def _write_server_launcher(self, destination: Path) -> None:
-        launcher = destination / "Start Server.bat"
-        launcher.write_text(
-            '@echo off\r\n'
-            'cd /d "%~dp0code"\r\n'
-            '"%~dp0venv\\Scripts\\python.exe" server.py\r\n'
-            'pause\r\n',
-            encoding="utf-8",
-        )
+        self._append_log("Start the server from the Real-Time Voice Chat Server desktop shortcut.")
 
     def _copy_token(self) -> None:
         if self.last_token:
@@ -461,7 +507,8 @@ class InstallerApp:
                             "Installation complete",
                             "The server is ready.\n\n"
                             f"Open this URL on the server computer:\nhttps://localhost:8000\n\n"
-                            "Start it with Start Server.bat. "
+                            "Start it from the Real-Time Voice Chat Server desktop shortcut. "
+                            "A console window shows server logs; close that window to stop the server. "
                             f"{token_message}\nShare code/data/server-ca.crt only with trusted clients.",
                             parent=self.root,
                         )
