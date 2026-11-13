@@ -42,9 +42,11 @@ A sophisticated client-server system built for low-latency interaction:
 
 If this is your first time using the project, use the server/client installer:
 
-1. Run `install.bat` on Windows or `bash install.sh` on Linux/macOS, then choose **Server** on the AI computer or **Client** on another device.
-2. On the server, activate the created environment, change to `code/`, and run `python server.py`.
-3. On the server computer, open `http://localhost:8000`. A client device uses the HTTPS URL configured by the server installer.
+1. On Windows, run `dist\RealTimeVoiceChatInstaller.exe` and choose **Server** or **Client**. On Linux/macOS, run `bash install.sh` and choose a role.
+2. On Windows, start the installed server with **Start Server.bat**. On Linux/macOS, activate the created environment, change to `code/`, and run `python server.py`.
+3. Trust the generated CA certificate, then open `https://localhost:8000` on the server computer. Client devices use the HTTPS URL and access token printed by the server installer.
+
+To build the standalone Windows GUI executable from source, run `build_windows_installer.bat` on a Windows machine with Python 3.11. The server setup downloads a managed Python 3.11 runtime and AI dependencies, so it still requires an internet connection and several GB of disk space.
 
 ## Technology Stack 🛠️
 
@@ -64,7 +66,7 @@ If this is your first time using the project, use the server/client installer:
 This project leverages powerful AI models, which have some requirements:
 
 *   **Operating System:**
-    *   **Native installer:** `install.bat` is for Windows; `install.sh` is for Linux/macOS.
+    *   **Native installer:** The GUI installer is for Windows; `install.sh` is for Linux/macOS.
 *   **🐍 Python:** 3.9 or higher (if setting up manually).
 *   **🚀 GPU:** **A powerful CUDA-enabled NVIDIA GPU is *highly recommended***, especially for faster STT (Whisper) and TTS (Coqui). Performance on CPU-only or weaker GPUs will be significantly slower.
     *   The setup assumes **CUDA 12.1**. Adjust PyTorch installation if you have a different CUDA version.
@@ -92,13 +94,9 @@ The installer asks whether this computer will run the AI server or connect as a 
 1. Choose **Server** on the computer that will run speech processing and the AI stack. Choose **Client** on other devices; client setup opens the server in a browser and does not install AI dependencies.
 2. Server setup creates a private-LAN HTTPS certificate and a one-time access token. Keep the token private. Copy `code/data/server-ca.crt` to each client device and add it to that device's trusted certificate authorities before opening the client URL. On Windows, allow Python through the firewall for private networks if prompted.
 3. Use the installer for your platform:
-    ```batch
-    install.bat
-    ```
-    ```sh
-    bash install.sh
-    ```
-    The server installer installs the AI dependencies. The client option only needs Python to open the server URL.
+    *   **Windows:** Run `dist\RealTimeVoiceChatInstaller.exe`. To build it from source, run `build_windows_installer.bat`.
+    *   **Linux/macOS:** Run `bash install.sh`.
+    The standalone Windows client needs no Python installation. The Windows server installer obtains a managed Python runtime and installs the AI dependencies.
 
 </details>
 
@@ -140,7 +138,7 @@ The installer asks whether this computer will run the AI server or connect as a 
     ```bash
     pip install -r requirements.txt
     ```
-    *   **Note on DeepSpeed:** The Windows installer uses the project's Python 3.10/CUDA 12.1 wheel; Linux attempts a normal DeepSpeed install. macOS skips DeepSpeed, and Coqui runs without that optional acceleration when it is unavailable.
+    *   **Note on DeepSpeed:** The Windows GUI installer uses Python 3.11 and skips DeepSpeed because the available Windows wheel is Python 3.10-only. Coqui runs without that optional acceleration. Linux attempts a normal DeepSpeed install; macOS skips it.
 6.  **For private-LAN client access**, return to the repository root and run:
     ```bash
     cd ..

@@ -3,6 +3,7 @@ import hashlib
 import sys
 import webbrowser
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlsplit
 
 
@@ -30,9 +31,10 @@ def _client_setup() -> None:
     webbrowser.open(server_url)
 
 
-def _server_setup() -> None:
+def _server_setup(lan_host: Optional[str] = None) -> None:
     default_host = get_default_lan_host()
-    lan_host = input(f"Server LAN IP or hostname [{default_host}]: ").strip() or default_host
+    if lan_host is None:
+        lan_host = input(f"Server LAN IP or hostname [{default_host}]: ").strip() or default_host
     token = configure_lan_server(lan_host)
     print()
     print("LAN server security has been configured.")
@@ -52,14 +54,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Configure a Real-Time Voice Chat server or client.")
     parser.add_argument("--client", action="store_true", help="Configure a thin client connection.")
     parser.add_argument("--configure-server", action="store_true", help="Configure secure LAN server mode.")
+    parser.add_argument("--host", help="LAN IP address or hostname for non-interactive server setup.")
     args = parser.parse_args()
     if args.client and args.configure_server:
         parser.error("Choose either --client or --configure-server.")
+    if args.host and not args.configure_server:
+        parser.error("--host requires --configure-server.")
 
     if args.client:
         _client_setup()
     elif args.configure_server:
-        _server_setup()
+        _server_setup(args.host)
     else:
         print("1) Set up this computer as a server")
         print("2) Connect as a client (no AI dependencies are installed)")
