@@ -35,8 +35,7 @@ from app_config import (
     settings_to_dict,
     validate_settings,
 )
-
-USE_SSL = False
+from server_security import load_server_config, verify_access_token
 
 NO_THINK = False
 
@@ -138,6 +137,7 @@ async def lifespan(app: FastAPI):
     if turn_detection:
         turn_detection.update_settings(settings.turn_speed / 100)
     app.state.Aborting = False # Keep this? Its usage isn't clear in the provided snippet. Minimizing changes.
+    app.state.voice_session_lock = asyncio.Lock()
 
     yield
 
@@ -942,6 +942,48 @@ class TranscriptionCallbacks:
 # --------------------------------------------------------------------
 # Main WebSocket endpoint
 # --------------------------------------------------------------------
+async def run_voice_session(ws: WebSocket) -> None:
+    logger.info("🖥️✅ Client connected via WebSocket.")
+
+    message_queue = asyncio.Queue()
+    audio_chunks = asyncio.Queue()
+    callbacks = TranscriptionCallbacks(app, message_queue)
+
+    app.state.AudioInputProcessor.realtime_callback = callbacks.on_partial
+    app.state.AudioInputProcessor.transcriber.potential_sentence_end = callbacks.on_potential_sentence
+    app.state.AudioInputProcessor.transcriber.on_tts_allowed_to_synthesize = callbacks.on_tts_allowed_to_synthesize
+    app.state.AudioInputProcessor.transcriber.potential_full_transcription_callback = callbacks.on_potential_final
+    app.state.AudioInputProcessor.transcriber.potential_full_transcription_abort_callback = callbacks.on_potential_abort
+    app.state.AudioInputProcessor.transcriber.full_transcription_callback = callbacks.on_final
+    app.state.AudioInputProcessor.transcriber.before_final_sentence = callbacks.on_before_final
+    app.state.AudioInputProcessor.recording_start_callback = callbacks.on_recording_start
+    app.state.AudioInputProcessor.silence_active_callback = callbacks.on_silence_active
+    app.state.SpeechPipelineManager.on_partial_assistant_text = callbacks.on_partial_assistant_text
+
+    tasks = [
+        asyncio.create_task(process_incoming_data(ws, app, audio_chunks, callbacks)),
+        asyncio.create_task(app.state.AudioInputProcessor.process_chunk_queue(audio_chunks)),
+        asyncio.create_task(send_text_messages(ws, message_queue)),
+        asyncio.create_task(send_tts_chunks(app, message_queue, callbacks)),
+    ]
+
+    try:
+        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+    except Exception as error:
+        logger.error(f"🖥️💥 {Colors.apply('ERROR').red} in WebSocket session: {repr(error)}")
+    finally:
+        logger.info("🖥️🧹 Cleaning up WebSocket tasks...")
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("🖥️❌ WebSocket session ended.")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     """
@@ -955,90 +997,67 @@ async def websocket_endpoint(ws: WebSocket):
     Args:
         ws: The WebSocket connection instance provided by FastAPI.
     """
+    server_config = load_server_config()
     await ws.accept()
-    logger.info("🖥️✅ Client connected via WebSocket.")
+    if server_config["mode"] == "server":
+        await ws.send_json({"type": "auth_required"})
+        try:
+            authentication_message = await asyncio.wait_for(ws.receive_text(), timeout=60)
+        except asyncio.TimeoutError:
+            await ws.close(code=4408, reason="Authentication timed out")
+            return
+        except WebSocketDisconnect:
+            return
 
-    message_queue = asyncio.Queue()
-    audio_chunks = asyncio.Queue()
+        if len(authentication_message) > 1024:
+            await ws.send_json({"type": "authentication_failed"})
+            await ws.close(code=4401, reason="Authentication failed")
+            return
+        try:
+            authentication = json.loads(authentication_message)
+        except json.JSONDecodeError:
+            authentication = {}
+        if (
+            not isinstance(authentication, dict)
+            or authentication.get("type") != "authenticate"
+            or not verify_access_token(
+                authentication.get("token", ""),
+                server_config["access_token_hash"],
+            )
+        ):
+            await ws.send_json({"type": "authentication_failed"})
+            await ws.close(code=4401, reason="Authentication failed")
+            return
+    voice_session_lock = app.state.voice_session_lock
+    if voice_session_lock.locked():
+        await ws.send_json({"type": "server_busy"})
+        await ws.close(code=1013, reason="The server is already handling a voice session")
+        return
 
-    # Set up callback manager - THIS NOW HOLDS THE CONNECTION-SPECIFIC STATE
-    callbacks = TranscriptionCallbacks(app, message_queue)
-
-    # Assign callbacks to the AudioInputProcessor (global component)
-    # These methods within callbacks will now operate on its *instance* state
-    app.state.AudioInputProcessor.realtime_callback = callbacks.on_partial
-    app.state.AudioInputProcessor.transcriber.potential_sentence_end = callbacks.on_potential_sentence
-    app.state.AudioInputProcessor.transcriber.on_tts_allowed_to_synthesize = callbacks.on_tts_allowed_to_synthesize
-    app.state.AudioInputProcessor.transcriber.potential_full_transcription_callback = callbacks.on_potential_final
-    app.state.AudioInputProcessor.transcriber.potential_full_transcription_abort_callback = callbacks.on_potential_abort
-    app.state.AudioInputProcessor.transcriber.full_transcription_callback = callbacks.on_final
-    app.state.AudioInputProcessor.transcriber.before_final_sentence = callbacks.on_before_final
-    app.state.AudioInputProcessor.recording_start_callback = callbacks.on_recording_start
-    app.state.AudioInputProcessor.silence_active_callback = callbacks.on_silence_active
-
-    # Assign callback to the SpeechPipelineManager (global component)
-    app.state.SpeechPipelineManager.on_partial_assistant_text = callbacks.on_partial_assistant_text
-
-    # Create tasks for handling different responsibilities
-    # Pass the 'callbacks' instance to tasks that need connection-specific state
-    tasks = [
-        asyncio.create_task(process_incoming_data(ws, app, audio_chunks, callbacks)), # Pass callbacks
-        asyncio.create_task(app.state.AudioInputProcessor.process_chunk_queue(audio_chunks)),
-        asyncio.create_task(send_text_messages(ws, message_queue)),
-        asyncio.create_task(send_tts_chunks(app, message_queue, callbacks)), # Pass callbacks
-    ]
-
+    await voice_session_lock.acquire()
     try:
-        # Wait for any task to complete (e.g., client disconnect)
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            if not task.done():
-                task.cancel()
-        # Await cancelled tasks to let them clean up if needed
-        await asyncio.gather(*pending, return_exceptions=True)
-    except Exception as e:
-        logger.error(f"🖥️💥 {Colors.apply('ERROR').red} in WebSocket session: {repr(e)}")
+        await ws.send_json({"type": "ready"})
+        await run_voice_session(ws)
     finally:
-        logger.info("🖥️🧹 Cleaning up WebSocket tasks...")
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        # Ensure all tasks are awaited after cancellation
-        # Use return_exceptions=True to prevent gather from stopping on first error during cleanup
-        await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info("🖥️❌ WebSocket session ended.")
+        voice_session_lock.release()
 
 # --------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------
 if __name__ == "__main__":
-
-    # Run the server without SSL
-    if not USE_SSL:
-        logger.info("🖥️▶️ Starting server without SSL.")
-        uvicorn.run("server:app", host="0.0.0.0", port=8000, log_config=None)
-
+    server_config = load_server_config()
+    host = server_config["bind_host"]
+    if os.getenv("RUNNING_IN_DOCKER", "").lower() == "true":
+        host = "0.0.0.0"
+    uvicorn_options = {
+        "host": host,
+        "port": server_config["port"],
+        "log_config": None,
+    }
+    if server_config["mode"] == "server":
+        uvicorn_options["ssl_certfile"] = server_config["certificate"]
+        uvicorn_options["ssl_keyfile"] = server_config["private_key"]
+        logger.info("🖥️🔒 Starting authenticated HTTPS server for trusted LAN clients.")
     else:
-        logger.info("🖥️🔒 Attempting to start server with SSL.")
-        # Check if cert files exist
-        cert_file = "127.0.0.1+1.pem"
-        key_file = "127.0.0.1+1-key.pem"
-        if not os.path.exists(cert_file) or not os.path.exists(key_file):
-             logger.error(f"🖥️💥 SSL cert file ({cert_file}) or key file ({key_file}) not found.")
-             logger.error("🖥️💥 Please generate them using mkcert:")
-             logger.error("🖥️💥   choco install mkcert") # Assuming Windows based on earlier check, adjust if needed
-             logger.error("🖥️💥   mkcert -install")
-             logger.error("🖥️💥   mkcert 127.0.0.1 YOUR_LOCAL_IP") # Remind user to replace with actual IP if needed
-             logger.error("🖥️💥 Exiting.")
-             sys.exit(1)
-
-        # Run the server with SSL
-        logger.info(f"🖥️▶️ Starting server with SSL (cert: {cert_file}, key: {key_file}).")
-        uvicorn.run(
-            "server:app",
-            host="0.0.0.0",
-            port=8000,
-            log_config=None,
-            ssl_certfile=cert_file,
-            ssl_keyfile=key_file,
-        )
+        logger.info(f"🖥️▶️ Starting local server on {host}:{server_config['port']}.")
+    uvicorn.run("server:app", **uvicorn_options)

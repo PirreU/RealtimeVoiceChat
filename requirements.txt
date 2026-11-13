@@ -8,6 +8,8 @@ uvicorn
 
 # configuration
 python-dotenv
+# Generate HTTPS certificates for LAN server mode
+cryptography
 
 # OpenAI-compatible LLM providers
 openai

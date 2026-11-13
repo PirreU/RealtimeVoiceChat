@@ -143,17 +143,20 @@ This is the most straightforward method, bundling the application, dependencies,
 
 This method requires managing the Python environment yourself. It offers more direct control but can be trickier, especially regarding ML dependencies.
 
-**B1) Using the Windows Install Script:**
+**B1) Using the Server/Client Installer:**
 
-1.  Ensure you meet the prerequisites (Python, potentially CUDA drivers).
-2.  Run the script. It attempts to create a venv, install PyTorch for CUDA 12.1, a compatible DeepSpeed wheel, and other requirements.
+1. Choose **Server** on the computer that will run speech processing and the AI stack. Choose **Client** on other devices; client setup opens the server in a browser and does not install AI dependencies.
+2. Server setup creates a private-LAN HTTPS certificate and a one-time access token. Keep the token private. Copy `code/data/server-ca.crt` to each client device and add it to that device's trusted certificate authorities before opening the client URL. On Windows, allow Python through the firewall for private networks if prompted.
+3. Use the installer for your platform:
     ```batch
     install.bat
     ```
-    *(This opens a new command prompt within the activated virtual environment.)*
-    Proceed to the **"Running the Application"** section.
+    ```sh
+    bash install.sh
+    ```
+    The server installer installs the AI dependencies. The client option only needs Python to open the server URL.
 
-**B2) Manual Steps (Linux/macOS/Windows):**
+**B2) Manual Server Installation (Linux/macOS/Windows):**
 
 1.  **Create & Activate Virtual Environment:**
     ```bash
@@ -190,7 +193,13 @@ This method requires managing the Python environment yourself. It offers more di
     ```bash
     pip install -r requirements.txt
     ```
-    *   **Note on DeepSpeed:** The `requirements.txt` may include DeepSpeed. Installation can be complex, especially on Windows. The `install.bat` tries a precompiled wheel. If manual installation fails, you might need to build it from source or consult resources like [deepspeedpatcher](https://github.com/erew123/deepspeedpatcher) (use at your own risk). Coqui TTS performance benefits most from DeepSpeed.
+    *   **Note on DeepSpeed:** The Windows installer uses the project's Python 3.10/CUDA 12.1 wheel; Linux attempts a normal DeepSpeed install. macOS skips DeepSpeed, and Coqui runs without that optional acceleration when it is unavailable.
+6.  **For private-LAN client access**, return to the repository root and run:
+    ```bash
+    cd ..
+    python setup.py --configure-server
+    ```
+    Follow the prompts, then start the server with HTTPS enabled. Skip this step for a local-only installation.
 
 </details>
 
@@ -217,11 +226,15 @@ Your application is already running via `docker compose up -d`! Check logs using
     python server.py
     ```
 
-**Accessing the Client (Both Methods):**
+**Accessing the Client:**
 
-1.  Open your web browser to `http://localhost:8000` (or your server's IP if running remotely/in Docker on another machine).
+1.  For a local-only installation, open `http://localhost:8000`. For Docker, open `http://localhost:8000` on the host running Docker.
 2.  **Grant microphone permissions** when prompted.
 3.  Click **"Start"** to begin chatting! Use "Stop" to end and "Reset" to clear the conversation.
+
+For a configured LAN server, use its `https://<server-ip>:8000` URL instead. The server requires the access token generated during setup. Settings can only be changed from the server computer. On the client, the installer asks for the server URL and opens it in your browser; the browser asks for the access token when you start a voice session. The current backend supports one active voice session at a time.
+
+**Trusting the LAN certificate:** Windows clients can open the shared `.crt` file and install it for the current user under **Trusted Root Certification Authorities**. On macOS, import it into Keychain Access and set it to **Always Trust**. On Debian/Ubuntu Linux, copy it to `/usr/local/share/ca-certificates/realtimevoicechat-ca.crt` and run `sudo update-ca-certificates`. Other Linux distributions and some browsers have their own trust-store steps. Restart the browser after importing if it still reports an untrusted certificate. Only share the CA certificate; never share `server.key`.
 
 ---
 
@@ -233,27 +246,11 @@ Settings are saved locally in `code/data/settings.json` (or in the persistent `a
 
 API keys are not stored in the settings file. Set `OPENAI_API_KEY` in the environment before starting the application when using the OpenAI provider. Ollama models must be available to the selected Ollama service; pull any missing model before restarting.
 
-For safety, the settings dashboard is available from the server computer at `http://localhost:8000`. The chat itself can still be opened from another device using the server's IP address.
+For safety, the settings dashboard is available from the server computer at `http://localhost:8000`. A server configured for LAN access uses its HTTPS URL instead. Settings remain restricted to the server computer.
 
 Advanced internal tuning still requires editing the relevant source files.
 
-### Advanced HTTPS configuration
-
-HTTPS requires editing the server and deployment configuration:
-
-*   **SSL/HTTPS (`server.py`):**
-    *   Set `USE_SSL = True` and provide paths to your certificate (`SSL_CERT_PATH`) and key (`SSL_KEY_PATH`) files.
-    *   **Docker Users:** You'll need to adjust `docker-compose.yml` to map the SSL port (e.g., 443) and potentially mount your certificate files as volumes.
-    <details>
-    <summary><strong>Generating Local SSL Certificates (Windows Example w/ mkcert)</strong></summary>
-
-    1.  Install Chocolatey package manager if you haven't already.
-    2.  Install mkcert: `choco install mkcert`
-    3.  Run Command Prompt *as Administrator*.
-    4.  Install a local Certificate Authority: `mkcert -install`
-    5.  Generate certs (replace `your.local.ip`): `mkcert localhost 127.0.0.1 ::1 your.local.ip`
-        *   This creates `.pem` files (e.g., `localhost+3.pem` and `localhost+3-key.pem`) in the current directory. Update `SSL_CERT_PATH` and `SSL_KEY_PATH` in `server.py` accordingly. Remember to potentially mount these into your Docker container.
-    </details>
+LAN setup is configured by `setup.py`; no source edits are required. The server creates a private CA and a server certificate for the chosen LAN IP or hostname. Copy only `code/data/server-ca.crt` to client devices and trust it there. The server access token is stored as a hash; if the token is lost, run `python setup.py --configure-server` again and share the newly generated token and CA certificate.
 
 ---
 

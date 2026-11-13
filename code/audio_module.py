@@ -1,4 +1,5 @@
 import asyncio
+import importlib.util
 import logging
 import os
 import struct
@@ -108,12 +109,15 @@ class AudioProcessor:
         # Dynamically load and configure the selected TTS engine
         if engine == "coqui":
             ensure_lasinya_models(models_root="models", model_name="Lasinya")
+            use_deepspeed = importlib.util.find_spec("deepspeed") is not None
+            if not use_deepspeed:
+                logger.info("DeepSpeed is not installed; Coqui will run without DeepSpeed acceleration.")
             self.engine = CoquiEngine(
                 specific_model="Lasinya",
                 local_models_path="./models",
                 voice=voice or "reference_audio.wav",
                 speed=speed or 1.1,
-                use_deepspeed=True,
+                use_deepspeed=use_deepspeed,
                 thread_count=6,
                 stream_chunk_size=self.current_stream_chunk_size,
                 overlap_wav_len=1024,

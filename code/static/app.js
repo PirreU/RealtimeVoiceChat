@@ -94,7 +94,10 @@ async function openSettings() {
     const response = await fetch("/api/settings");
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Could not load settings.");
+      const message = response.status === 403
+        ? "Settings can only be changed from the server computer."
+        : data.detail || "Could not load settings.";
+      throw new Error(message);
     }
     updateSettingsFields(data.settings);
     settingsRestartNotice.hidden = !data.restart_required;
@@ -132,6 +135,7 @@ let chatHistory = [];
 let typingUser = "";
 let typingAssistant = "";
 let isStoppingSession = false;
+let voiceSessionStarted = false;
 
 // --- batching + fixed 8‑byte header setup ---
 const BATCH_SAMPLES = 2048;
@@ -496,11 +500,16 @@ startBtn.onclick = async () => {
     return;
   }
   setStatus("Initializing connection...", "idle");
+  voiceSessionStarted = false;
 
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   socket = new WebSocket(`${wsProto}//${location.host}/ws`);
 
-  socket.onopen = async () => {
+  const startVoiceSession = async () => {
+    if (voiceSessionStarted) {
+      return;
+    }
+    voiceSessionStarted = true;
     setStatus("Connected. Activating mic and TTS…", "recording");
     try {
       await startRawPcmCapture();
@@ -515,10 +524,42 @@ startBtn.onclick = async () => {
     }
   };
 
+  socket.onopen = () => {
+    setStatus("Connected. Securing the session…", "idle");
+  };
+
   socket.onmessage = (evt) => {
     if (typeof evt.data === "string") {
       try {
         const msg = JSON.parse(evt.data);
+        if (msg.type === "auth_required") {
+          const token = (
+            sessionStorage.getItem("rvchatServerToken")
+            || window.prompt("Enter the server access token:")
+            || ""
+          ).trim();
+          if (!token) {
+            setStatus("A server access token is required.", "error");
+            socket.close();
+            return;
+          }
+          sessionStorage.setItem("rvchatServerToken", token);
+          socket.send(JSON.stringify({ type: "authenticate", token }));
+          return;
+        }
+        if (msg.type === "authentication_failed") {
+          sessionStorage.removeItem("rvchatServerToken");
+          setStatus("Authentication failed. Check the server access token.", "error");
+          return;
+        }
+        if (msg.type === "server_busy") {
+          setStatus("The server is already handling a voice session. Try again later.", "warning");
+          return;
+        }
+        if (msg.type === "ready") {
+          void startVoiceSession();
+          return;
+        }
         handleJSONMessage(msg);
       } catch (e) {
         console.error("Error parsing message:", e);
