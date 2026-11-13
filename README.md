@@ -40,6 +40,16 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
 *   **Dockerized Deployment:** Recommended setup using Docker Compose for easier dependency management.
 
+## Quick Start 🧭
+
+If this is your first time using the project, the easiest path is:
+
+1. Install the dependencies with Docker or the Windows setup script.
+2. Start the app with `docker compose up -d` or `python server.py` inside `code/`.
+3. Open `http://localhost:8000`, allow microphone access, then press **Start**.
+
+You do not need to change the code to try it out. If the app does not respond, check the browser permission prompt and confirm your model and TTS settings are available.
+
 ## Technology Stack 🛠️
 
 *   **Backend:** Python < 3.13, FastAPI

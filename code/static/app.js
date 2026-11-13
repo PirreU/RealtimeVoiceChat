@@ -16,7 +16,26 @@
 const statusDiv = document.getElementById("status");
 const messagesDiv = document.getElementById("messages");
 const speedSlider = document.getElementById("speedSlider");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const clearBtn = document.getElementById("clearBtn");
+const copyBtn = document.getElementById("copyBtn");
+
+function setStatus(message, state = "idle") {
+  statusDiv.textContent = message;
+  statusDiv.dataset.state = state;
+}
+
+function updateControls() {
+  const connected = !!(socket && socket.readyState === WebSocket.OPEN);
+  startBtn.disabled = connected;
+  stopBtn.disabled = !connected;
+  speedSlider.disabled = !connected;
+  copyBtn.disabled = chatHistory.length === 0;
+}
+
 speedSlider.disabled = true;  // start disabled
+updateControls();
 
 let socket = null;
 let audioContext = null;
@@ -30,6 +49,7 @@ let ignoreIncomingTTS = false;
 let chatHistory = [];
 let typingUser = "";
 let typingAssistant = "";
+let isStoppingSession = false;
 
 // --- batching + fixed 8‑byte header setup ---
 const BATCH_SAMPLES = 2048;
@@ -130,8 +150,13 @@ async function startRawPcmCapture() {
     source.connect(micWorkletNode);
     statusDiv.textContent = "Recording...";
   } catch (err) {
-    statusDiv.textContent = "Mic access denied.";
+    setStatus("Microphone access was blocked. Please allow access and try again.", "error");
+    isStoppingSession = true;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
     console.error(err);
+    updateControls();
   }
 }
 
@@ -272,10 +297,12 @@ function escapeHtml(str) {
 
 // UI Controls
 
-document.getElementById("clearBtn").onclick = () => {
+clearBtn.onclick = () => {
   chatHistory = [];
   typingUser = typingAssistant = "";
   renderMessages();
+  setStatus("Conversation reset.", "idle");
+  updateControls();
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ type: 'clear_history' }));
   }
@@ -292,21 +319,29 @@ speedSlider.addEventListener("input", (e) => {
   console.log("Speed setting changed to:", speedValue);
 });
 
-document.getElementById("startBtn").onclick = async () => {
+startBtn.onclick = async () => {
   if (socket && socket.readyState === WebSocket.OPEN) {
-    statusDiv.textContent = "Already recording.";
+    setStatus("Already recording.", "recording");
     return;
   }
-  statusDiv.textContent = "Initializing connection...";
+  setStatus("Initializing connection...", "idle");
 
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   socket = new WebSocket(`${wsProto}//${location.host}/ws`);
 
   socket.onopen = async () => {
-    statusDiv.textContent = "Connected. Activating mic and TTS…";
-    await startRawPcmCapture();
-    await setupTTSPlayback();
-    speedSlider.disabled = false; 
+    setStatus("Connected. Activating mic and TTS…", "recording");
+    try {
+      await startRawPcmCapture();
+      await setupTTSPlayback();
+      updateControls();
+    } catch (err) {
+      console.error("Failed to initialize voice session:", err);
+      setStatus("Voice setup failed. Please try again.", "error");
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    }
   };
 
   socket.onmessage = (evt) => {
@@ -321,38 +356,65 @@ document.getElementById("startBtn").onclick = async () => {
   };
 
   socket.onclose = () => {
-    statusDiv.textContent = "Connection closed.";
+    if (isStoppingSession) {
+      setStatus("Stopped.", "idle");
+    } else if (statusDiv.dataset.state !== "error" && statusDiv.dataset.state !== "warning") {
+      setStatus("Session ended. Start again when you're ready.", "idle");
+    }
+    isStoppingSession = false;
     flushRemainder();
     cleanupAudio();
-    speedSlider.disabled = true;
+    updateControls();
   };
 
   socket.onerror = (err) => {
-    statusDiv.textContent = "Connection error.";
+    setStatus("Connection error. Please check your setup and try again.", "error");
     cleanupAudio();
     console.error(err);
-    speedSlider.disabled = true; 
+    updateControls();
   };
 };
 
-document.getElementById("stopBtn").onclick = () => {
+stopBtn.onclick = () => {
+  isStoppingSession = true;
   if (socket && socket.readyState === WebSocket.OPEN) {
     flushRemainder();
     socket.close();
   }
   cleanupAudio();
-  statusDiv.textContent = "Stopped.";
+  setStatus("Stopped.", "idle");
+  updateControls();
 };
 
-document.getElementById("copyBtn").onclick = () => {
+copyBtn.onclick = async () => {
   const text = chatHistory
     .map(msg => `${msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}: ${msg.content}`)
     .join('\n');
-  
-  navigator.clipboard.writeText(text)
-    .then(() => console.log("Conversation copied to clipboard"))
-    .catch(err => console.error("Copy failed:", err));
+
+  if (!text) {
+    setStatus("Nothing to copy yet.", "warning");
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+    }
+    setStatus("Conversation copied.", "idle");
+    console.log("Conversation copied to clipboard");
+  } catch (err) {
+    setStatus("Copy failed. Please select text manually.", "warning");
+    console.error("Copy failed:", err);
+  }
 };
 
 // First render
 renderMessages();
+updateControls();
