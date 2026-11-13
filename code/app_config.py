@@ -26,7 +26,7 @@ def _default_system_prompt() -> str:
 
 
 class AppSettings(BaseModel):
-    llm_provider: Literal["ollama", "openai", "lmstudio"] = "ollama"
+    llm_provider: Literal["ollama", "openai", "lmstudio", "openai_compatible"] = "ollama"
     llm_model: str = Field(
         "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
         min_length=1,
@@ -88,6 +88,8 @@ def validate_settings(settings: AppSettings) -> AppSettings:
             or parsed_url.password is not None
         ):
             raise ValueError("The provider URL must be a valid HTTP or HTTPS URL without credentials.")
+    elif settings.llm_provider == "openai_compatible":
+        raise ValueError("Enter the base URL for your OpenAI-compatible local model server.")
 
     if settings.tts_engine == "coqui":
         voice_path = settings.tts_voice.replace("\\", "/")

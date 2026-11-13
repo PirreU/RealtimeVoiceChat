@@ -561,6 +561,7 @@
                 <option value="ollama">Ollama (local)</option>
                 <option value="openai">OpenAI</option>
                 <option value="lmstudio">LM Studio (local)</option>
+                <option value="openai_compatible">Other local server (OpenAI-compatible)</option>
               </select>
             </div>
             <div class="settings-field">
@@ -568,9 +569,9 @@
               <input id="llmModel" name="llm_model" type="text" required maxlength="200" autocomplete="off">
             </div>
             <div class="settings-field">
-              <label for="llmBaseUrl">Provider URL <span class="settings-help">(optional)</span></label>
-              <input id="llmBaseUrl" name="llm_base_url" type="url" maxlength="400" placeholder="Uses the provider default when blank">
-              <p class="settings-help">For Ollama or LM Studio, use the address reachable from the app server.</p>
+              <label for="llmBaseUrl">Provider URL</label>
+              <input id="llmBaseUrl" name="llm_base_url" type="url" maxlength="400" placeholder="Uses the provider default when available">
+              <p id="llmBaseUrlHelp" class="settings-help">Use the address reachable from the app server. For other local servers, include the OpenAI-compatible API base path, commonly /v1.</p>
             </div>
             <p id="apiKeyStatus" class="settings-help"></p>
           </section>

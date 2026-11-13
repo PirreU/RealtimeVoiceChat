@@ -186,11 +186,11 @@ class LLM:
     """
     Provides a unified interface for interacting with various LLM backends.
 
-    Supports Ollama (via direct HTTP), OpenAI API, and LMStudio (via OpenAI-compatible API).
+    Supports Ollama (via direct HTTP), OpenAI API, and OpenAI-compatible local servers.
     Handles client initialization, streaming generation, request cancellation,
     system prompts, and basic connection management including an optional `ollama ps` check.
     """
-    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio"]
+    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio", "openai_compatible"]
 
     def __init__(
         self,
@@ -205,7 +205,7 @@ class LLM:
         Initializes the LLM interface for a specific backend and model.
 
         Args:
-            backend: The name of the LLM backend to use (e.g., "ollama", "openai", "lmstudio").
+            backend: The name of the LLM backend to use.
             model: The identifier for the specific model to use within the backend.
             system_prompt: An optional system prompt to prepend to conversations.
             api_key: API key, primarily for OpenAI backend (can be omitted for others if not needed).
@@ -220,11 +220,13 @@ class LLM:
         self.backend = backend.lower()
         if self.backend not in self.SUPPORTED_BACKENDS:
             raise ValueError(f"Unsupported backend '{backend}'. Supported: {self.SUPPORTED_BACKENDS}")
+        if self.backend == "openai_compatible" and not base_url:
+            raise ValueError("An API base URL is required for the OpenAI-compatible backend.")
 
         if self.backend == "ollama" and not REQUESTS_AVAILABLE:
              raise ImportError("requests library is required for the 'ollama' backend but not installed.")
-        if self.backend in ["openai", "lmstudio"] and not OPENAI_AVAILABLE:
-             raise ImportError("openai library is required for the 'openai'/'lmstudio' backends but not installed.")
+        if self.backend in ["openai", "lmstudio", "openai_compatible"] and not OPENAI_AVAILABLE:
+             raise ImportError("openai library is required for OpenAI-compatible backends but not installed.")
 
         self.model = model
         self.system_prompt = system_prompt
@@ -245,6 +247,7 @@ class LLM:
         self.effective_openai_key = self._api_key or OPENAI_API_KEY
         self.effective_ollama_url = self._base_url or OLLAMA_BASE_URL if self.backend == "ollama" else None
         self.effective_lmstudio_url = self._base_url or LMSTUDIO_BASE_URL if self.backend == "lmstudio" else None
+        self.effective_openai_compatible_url = self._base_url if self.backend == "openai_compatible" else None
         self.effective_openai_base_url = self._base_url if self.backend == "openai" and self._base_url else None
 
         if self.backend == "ollama" and self.effective_ollama_url:
@@ -277,13 +280,13 @@ class LLM:
             False otherwise.
         """
         if self._client_initialized:
-            if self.backend in ["openai", "lmstudio"]: return self.client is not None
+            if self.backend in ["openai", "lmstudio", "openai_compatible"]: return self.client is not None
             if self.backend == "ollama": return self.ollama_session is not None and self._ollama_connection_ok # Check flag
             return False
 
         with self._client_init_lock:
             if self._client_initialized: # Double check
-                if self.backend in ["openai", "lmstudio"]: return self.client is not None
+                if self.backend in ["openai", "lmstudio", "openai_compatible"]: return self.client is not None
                 if self.backend == "ollama": return self.ollama_session is not None and self._ollama_connection_ok
                 return False
 
@@ -297,6 +300,9 @@ class LLM:
                     init_ok = self.client is not None
                 elif self.backend == "lmstudio":
                     self.client = _create_openai_client(api_key="lmstudio-key", base_url=self.effective_lmstudio_url)
+                    init_ok = self.client is not None
+                elif self.backend == "openai_compatible":
+                    self.client = _create_openai_client(api_key="local-model-key", base_url=self.effective_openai_compatible_url)
                     init_ok = self.client is not None
                 elif self.backend == "ollama":
                     if self.ollama_session and self.effective_ollama_url:
@@ -667,19 +673,20 @@ class LLM:
                 self._register_request(req_id, "openai", stream_object_to_register)
                 yield from self._yield_openai_chunks(stream_iterator, req_id)
 
-            elif self.backend == "lmstudio":
+            elif self.backend in ["lmstudio", "openai_compatible"]:
+                provider_label = "LM Studio" if self.backend == "lmstudio" else "OpenAI-compatible"
                 if self.client is None:
-                    raise RuntimeError("LM Studio client not initialized (should have been caught by lazy_init).")
+                    raise RuntimeError(f"{provider_label} client not initialized (should have been caught by lazy_init).")
                 if 'temperature' not in kwargs:
                     kwargs['temperature'] = 0.7
                 payload = { "model": self.model, "messages": messages, "stream": True, **kwargs }
-                logger.info(f"🤖💬 [{req_id}] Sending LM Studio request with payload:")
+                logger.info(f"🤖💬 [{req_id}] Sending {provider_label} request with payload:")
                 logger.info(f"{json.dumps(payload, indent=2)}")
                 stream_iterator = self.client.chat.completions.create(
                     model=self.model, messages=messages, stream=True, **kwargs
                 )
                 stream_object_to_register = stream_iterator # The Stream object itself
-                self._register_request(req_id, "lmstudio", stream_object_to_register)
+                self._register_request(req_id, self.backend, stream_object_to_register)
                 yield from self._yield_openai_chunks(stream_iterator, req_id)
 
             elif self.backend == "ollama":

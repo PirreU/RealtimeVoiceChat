@@ -227,7 +227,7 @@ Your application is already running via `docker compose up -d`! Check logs using
 
 ## Application Settings ⚙️
 
-Open **Settings** in the web interface to choose the AI provider and model, configure its endpoint, select the speech engine and voice, adjust speech speed, choose the transcription language and model, and customize the assistant prompt.
+Open **Settings** in the web interface to choose the AI provider and model, configure its endpoint, select the speech engine and voice, adjust speech speed, choose the transcription language and model, and customize the assistant prompt. Local LLM choices include Ollama, LM Studio, and other servers that provide an OpenAI-compatible API, such as llama.cpp server.
 
 Settings are saved locally in `code/data/settings.json` (or in the persistent `app_settings` Docker volume). Changes take effect after restarting the application. For Docker, restart with `docker compose restart app`.
 

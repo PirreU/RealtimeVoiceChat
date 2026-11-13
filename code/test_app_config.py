@@ -30,6 +30,18 @@ class AppSettingsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_settings(AppSettings(tts_voice="../outside.wav"))
 
+    def test_openai_compatible_provider_requires_a_base_url(self):
+        with self.assertRaises(ValueError):
+            validate_settings(AppSettings(llm_provider="openai_compatible"))
+
+        settings = validate_settings(
+            AppSettings(
+                llm_provider="openai_compatible",
+                llm_base_url="http://127.0.0.1:8080/v1",
+            )
+        )
+        self.assertEqual(settings.llm_base_url, "http://127.0.0.1:8080/v1")
+
 
 if __name__ == "__main__":
     unittest.main()

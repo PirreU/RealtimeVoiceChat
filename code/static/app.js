@@ -29,6 +29,8 @@ const ttsEngineSelect = document.getElementById("ttsEngine");
 const ttsVoiceInput = document.getElementById("ttsVoice");
 const ttsSpeedInput = document.getElementById("ttsSpeed");
 const turnSpeedInput = document.getElementById("turnSpeed");
+const llmProviderSelect = document.getElementById("llmProvider");
+const llmBaseUrlInput = document.getElementById("llmBaseUrl");
 
 function setStatus(message, state = "idle") {
   statusDiv.textContent = message;
@@ -51,10 +53,18 @@ function updateTtsVoiceHelp() {
   }
 }
 
+function updateProviderHelp() {
+  const isGenericLocal = llmProviderSelect.value === "openai_compatible";
+  llmBaseUrlInput.required = isGenericLocal;
+  document.getElementById("llmBaseUrlHelp").textContent = isGenericLocal
+    ? "Required. Enter the OpenAI-compatible API base URL reachable from this app, commonly ending in /v1. Works with llama.cpp server and similar tools."
+    : "Use the address reachable from the app server. For Ollama or LM Studio, leave blank to use its default address.";
+}
+
 function updateSettingsFields(settings) {
-  document.getElementById("llmProvider").value = settings.llm_provider;
+  llmProviderSelect.value = settings.llm_provider;
   document.getElementById("llmModel").value = settings.llm_model;
-  document.getElementById("llmBaseUrl").value = settings.llm_base_url;
+  llmBaseUrlInput.value = settings.llm_base_url;
   ttsEngineSelect.value = settings.tts_engine;
   ttsEngineSelect.dataset.previousEngine = settings.tts_engine;
   document.getElementById("ttsModel").value = settings.tts_model;
@@ -72,6 +82,7 @@ function updateSettingsFields(settings) {
     ? "OpenAI API key is configured in the server environment. Keys are not stored in this settings file."
     : "OpenAI API key is not configured. Set OPENAI_API_KEY in the server environment if you choose OpenAI.";
   updateTtsVoiceHelp();
+  updateProviderHelp();
 }
 
 async function openSettings() {
@@ -367,6 +378,7 @@ function escapeHtml(str) {
 }
 
 settingsBtn.onclick = openSettings;
+llmProviderSelect.addEventListener("change", updateProviderHelp);
 document.getElementById("closeSettingsBtn").onclick = closeSettings;
 document.getElementById("cancelSettingsBtn").onclick = closeSettings;
 settingsOverlay.addEventListener("click", (event) => {
