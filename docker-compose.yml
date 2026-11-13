@@ -10,6 +10,7 @@ services:
     environment:
       # Point to the 'ollama' service
       - OLLAMA_BASE_URL=http://ollama:11434
+      - APP_SETTINGS_PATH=/app/code/data/settings.json
       # --- Other App Environment Variables ---
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MAX_AUDIO_QUEUE_SIZE=${MAX_AUDIO_QUEUE_SIZE:-50}
@@ -20,6 +21,7 @@ services:
     volumes:
        # Optional: Mount code for live development
        # - ./code:/app/code
+       - app_settings:/app/code/data
        # Mount cache directories
        - huggingface_cache:/home/appuser/.cache/huggingface
        - torch_cache:/home/appuser/.cache/torch
@@ -67,6 +69,8 @@ services:
 
 # Define named volumes for persistent data
 volumes:
+  app_settings:
+    driver: local
   ollama_data:
     driver: local
   huggingface_cache:

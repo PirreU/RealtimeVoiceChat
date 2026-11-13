@@ -80,6 +80,8 @@ class AudioProcessor:
             self,
             engine: str = START_ENGINE,
             orpheus_model: str = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf",
+            voice: Optional[str] = None,
+            speed: Optional[float] = None,
         ) -> None:
         """
         Initializes the AudioProcessor with a specific TTS engine.
@@ -91,6 +93,8 @@ class AudioProcessor:
         Args:
             engine: The name of the TTS engine to use ("coqui", "kokoro", "orpheus").
             orpheus_model: The path or identifier for the Orpheus model file (used only if engine is "orpheus").
+            voice: Engine-specific voice name or reference audio path.
+            speed: Speech speed for engines that support speed adjustment.
         """
         self.engine_name = engine
         self.stop_event = threading.Event()
@@ -107,8 +111,8 @@ class AudioProcessor:
             self.engine = CoquiEngine(
                 specific_model="Lasinya",
                 local_models_path="./models",
-                voice="reference_audio.wav",
-                speed=1.1,
+                voice=voice or "reference_audio.wav",
+                speed=speed or 1.1,
                 use_deepspeed=True,
                 thread_count=6,
                 stream_chunk_size=self.current_stream_chunk_size,
@@ -120,8 +124,8 @@ class AudioProcessor:
             )
         elif engine == "kokoro":
             self.engine = KokoroEngine(
-                voice="af_heart",
-                default_speed=1.26,
+                voice=voice or "af_heart",
+                default_speed=speed or 1.26,
                 trim_silence=True,
                 silence_threshold=0.01,
                 extra_start_ms=25,
@@ -137,8 +141,7 @@ class AudioProcessor:
                 repetition_penalty=1.1,
                 max_tokens=1200,
             )
-            voice = OrpheusVoice("tara")
-            self.engine.set_voice(voice)
+            self.engine.set_voice(OrpheusVoice(voice or "tara"))
         else:
             raise ValueError(f"Unsupported engine: {engine}")
 

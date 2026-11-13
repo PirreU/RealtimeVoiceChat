@@ -158,8 +158,9 @@ class TranscriptionProcessor:
 
         self.text_similarity = TextSimilarity(focus='end', n_words=5)
 
-        # Use provided config or default
-        self.recorder_config = copy.deepcopy(recorder_config if recorder_config else DEFAULT_RECORDER_CONFIG)
+        self.recorder_config = copy.deepcopy(DEFAULT_RECORDER_CONFIG)
+        if recorder_config:
+            self.recorder_config.update(recorder_config)
         self.recorder_config['language'] = self.source_language # Ensure language is set
 
         if USE_TURN_DETECTION:

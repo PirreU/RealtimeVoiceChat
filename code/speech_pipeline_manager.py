@@ -126,6 +126,10 @@ class SpeechPipelineManager:
             llm_model: str = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
             no_think: bool = False,
             orpheus_model: str = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf",
+            llm_base_url: Optional[str] = None,
+            tts_voice: Optional[str] = None,
+            tts_speed: Optional[float] = None,
+            system_prompt_override: Optional[str] = None,
         ):
         """
         Initializes the SpeechPipelineManager.
@@ -140,6 +144,10 @@ class SpeechPipelineManager:
             llm_model: The specific LLM model identifier.
             no_think: If True, removes specific thinking tags from LLM output.
             orpheus_model: Path or identifier for the Orpheus TTS model, if used.
+            llm_base_url: Optional endpoint override for the selected LLM provider.
+            tts_voice: Engine-specific voice name or reference audio path.
+            tts_speed: Speech speed for engines that support speed adjustment.
+            system_prompt_override: Optional system prompt replacing the file default.
         """
         self.tts_engine = tts_engine
         self.llm_provider = llm_provider
@@ -147,14 +155,18 @@ class SpeechPipelineManager:
         self.no_think = no_think
         self.orpheus_model = orpheus_model
 
-        self.system_prompt = system_prompt
+        self.system_prompt = (
+            system_prompt if system_prompt_override is None else system_prompt_override
+        )
         if tts_engine == "orpheus":
             self.system_prompt += f"\n{orpheus_prompt_addon}"
 
         # --- Instance Dependencies ---
         self.audio = AudioProcessor(
             engine=self.tts_engine,
-            orpheus_model=self.orpheus_model
+            orpheus_model=self.orpheus_model,
+            voice=tts_voice,
+            speed=tts_speed,
         )
         self.audio.on_first_audio_chunk_synthesize = self.on_first_audio_chunk_synthesize
         self.text_similarity = TextSimilarity(focus='end', n_words=5)
@@ -166,6 +178,7 @@ class SpeechPipelineManager:
             model=self.llm_model,
             system_prompt=self.system_prompt,
             no_think=no_think,
+            base_url=llm_base_url,
         )
         self.llm.prewarm()
         self.llm_inference_time = self.llm.measure_inference_time()

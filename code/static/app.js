@@ -20,10 +20,82 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const clearBtn = document.getElementById("clearBtn");
 const copyBtn = document.getElementById("copyBtn");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const settingsForm = document.getElementById("settingsForm");
+const settingsFeedback = document.getElementById("settingsFeedback");
+const settingsRestartNotice = document.getElementById("settingsRestartNotice");
+const ttsEngineSelect = document.getElementById("ttsEngine");
+const ttsVoiceInput = document.getElementById("ttsVoice");
+const ttsSpeedInput = document.getElementById("ttsSpeed");
+const turnSpeedInput = document.getElementById("turnSpeed");
 
 function setStatus(message, state = "idle") {
   statusDiv.textContent = message;
   statusDiv.dataset.state = state;
+}
+
+function setSettingsFeedback(message, state = "") {
+  settingsFeedback.textContent = message;
+  settingsFeedback.className = state ? `settings-${state}` : "";
+}
+
+function updateTtsVoiceHelp() {
+  const help = document.getElementById("ttsVoiceHelp");
+  if (ttsEngineSelect.value === "coqui") {
+    help.textContent = "Reference audio path relative to the code folder (default: reference_audio.wav).";
+  } else if (ttsEngineSelect.value === "kokoro") {
+    help.textContent = "Kokoro voice ID (default: af_heart).";
+  } else {
+    help.textContent = "Orpheus voice name (default: tara).";
+  }
+}
+
+function updateSettingsFields(settings) {
+  document.getElementById("llmProvider").value = settings.llm_provider;
+  document.getElementById("llmModel").value = settings.llm_model;
+  document.getElementById("llmBaseUrl").value = settings.llm_base_url;
+  ttsEngineSelect.value = settings.tts_engine;
+  ttsEngineSelect.dataset.previousEngine = settings.tts_engine;
+  document.getElementById("ttsModel").value = settings.tts_model;
+  ttsVoiceInput.value = settings.tts_voice;
+  ttsSpeedInput.value = settings.tts_speed;
+  ttsSpeedInput.disabled = settings.tts_engine === "orpheus";
+  document.getElementById("ttsSpeedValue").textContent = `${Number(settings.tts_speed).toFixed(2)}x`;
+  document.getElementById("sttLanguage").value = settings.stt_language;
+  document.getElementById("sttModel").value = settings.stt_model;
+  speedSlider.value = settings.turn_speed;
+  turnSpeedInput.value = settings.turn_speed;
+  document.getElementById("turnSpeedValue").textContent = settings.turn_speed < 50 ? "Faster replies" : "Longer pauses";
+  document.getElementById("systemPrompt").value = settings.system_prompt;
+  document.getElementById("apiKeyStatus").textContent = settings.openai_api_key_configured
+    ? "OpenAI API key is configured in the server environment. Keys are not stored in this settings file."
+    : "OpenAI API key is not configured. Set OPENAI_API_KEY in the server environment if you choose OpenAI.";
+  updateTtsVoiceHelp();
+}
+
+async function openSettings() {
+  settingsOverlay.hidden = false;
+  document.getElementById("closeSettingsBtn").focus();
+  settingsRestartNotice.hidden = true;
+  setSettingsFeedback("Loading saved settings...");
+  try {
+    const response = await fetch("/api/settings");
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load settings.");
+    }
+    updateSettingsFields(data.settings);
+    settingsRestartNotice.hidden = !data.restart_required;
+    setSettingsFeedback("");
+  } catch (error) {
+    setSettingsFeedback(error.message || "Could not load settings. Check the server and try again.", "error");
+  }
+}
+
+function closeSettings() {
+  settingsOverlay.hidden = true;
+  settingsBtn.focus();
 }
 
 function updateControls() {
@@ -35,7 +107,6 @@ function updateControls() {
 }
 
 speedSlider.disabled = true;  // start disabled
-updateControls();
 
 let socket = null;
 let audioContext = null;
@@ -295,6 +366,80 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+settingsBtn.onclick = openSettings;
+document.getElementById("closeSettingsBtn").onclick = closeSettings;
+document.getElementById("cancelSettingsBtn").onclick = closeSettings;
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettings();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !settingsOverlay.hidden) {
+    closeSettings();
+  }
+});
+
+ttsEngineSelect.addEventListener("change", (event) => {
+  const defaults = {
+    coqui: "reference_audio.wav",
+    kokoro: "af_heart",
+    orpheus: "tara"
+  };
+  const previousDefault = defaults[event.target.dataset.previousEngine];
+  if (!ttsVoiceInput.value || ttsVoiceInput.value === previousDefault) {
+    ttsVoiceInput.value = defaults[event.target.value];
+  }
+  event.target.dataset.previousEngine = event.target.value;
+  ttsSpeedInput.disabled = event.target.value === "orpheus";
+  updateTtsVoiceHelp();
+});
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const saveButton = document.getElementById("saveSettingsBtn");
+  const settings = {
+    llm_provider: document.getElementById("llmProvider").value,
+    llm_model: document.getElementById("llmModel").value.trim(),
+    llm_base_url: document.getElementById("llmBaseUrl").value.trim(),
+    tts_engine: ttsEngineSelect.value,
+    tts_model: document.getElementById("ttsModel").value.trim(),
+    tts_voice: ttsVoiceInput.value.trim(),
+    tts_speed: Number(ttsSpeedInput.value),
+    turn_speed: Number(turnSpeedInput.value),
+    stt_language: document.getElementById("sttLanguage").value.trim(),
+    stt_model: document.getElementById("sttModel").value.trim(),
+    system_prompt: document.getElementById("systemPrompt").value
+  };
+
+  saveButton.disabled = true;
+  setSettingsFeedback("Saving settings...");
+  try {
+    const response = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map(error => error.msg).join(" ")
+        : data.detail;
+      throw new Error(detail || "Could not save settings.");
+    }
+    updateSettingsFields(data.settings);
+    settingsRestartNotice.hidden = !data.restart_required;
+    setSettingsFeedback(
+      data.restart_required ? "Settings saved. Restart the app to apply them." : "Settings saved; they are already active.",
+      data.restart_required ? "notice" : "success"
+    );
+  } catch (error) {
+    setSettingsFeedback(error.message || "Could not save settings. Check the server and try again.", "error");
+  } finally {
+    saveButton.disabled = false;
+  }
+});
+
 // UI Controls
 
 clearBtn.onclick = () => {
@@ -310,6 +455,8 @@ clearBtn.onclick = () => {
 
 speedSlider.addEventListener("input", (e) => {
   const speedValue = parseInt(e.target.value);
+  turnSpeedInput.value = speedValue;
+  document.getElementById("turnSpeedValue").textContent = speedValue < 50 ? "Faster replies" : "Longer pauses";
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({
       type: 'set_speed',
@@ -317,6 +464,18 @@ speedSlider.addEventListener("input", (e) => {
     }));
   }
   console.log("Speed setting changed to:", speedValue);
+});
+
+turnSpeedInput.addEventListener("input", (e) => {
+  const speedValue = parseInt(e.target.value);
+  speedSlider.value = speedValue;
+  document.getElementById("turnSpeedValue").textContent = speedValue < 50 ? "Faster replies" : "Longer pauses";
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({
+      type: 'set_speed',
+      speed: speedValue
+    }));
+  }
 });
 
 startBtn.onclick = async () => {

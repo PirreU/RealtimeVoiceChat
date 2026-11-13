@@ -26,6 +26,7 @@ class AudioInputProcessor:
             is_orpheus: bool = False,
             silence_active_callback: Optional[Callable[[bool], None]] = None,
             pipeline_latency: float = 0.5,
+            stt_model: str = "base.en",
         ) -> None:
         """
         Initializes the AudioInputProcessor.
@@ -36,6 +37,7 @@ class AudioInputProcessor:
             silence_active_callback: Optional callback function invoked when silence state changes.
                                      It receives a boolean argument (True if silence is active).
             pipeline_latency: Estimated latency of the processing pipeline in seconds.
+            stt_model: Whisper model used for both final and realtime transcription.
         """
         self.last_partial_text: Optional[str] = None
         self.transcriber = TranscriptionProcessor(
@@ -44,6 +46,10 @@ class AudioInputProcessor:
             silence_active_callback=self._silence_active_callback,
             is_orpheus=is_orpheus,
             pipeline_latency=pipeline_latency,
+            recorder_config={
+                "model": stt_model,
+                "realtime_model_type": stt_model,
+            },
         )
         # Flag to indicate if the transcription loop has failed fatally
         self._transcription_failed = False

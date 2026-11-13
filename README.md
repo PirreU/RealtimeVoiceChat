@@ -225,22 +225,22 @@ Your application is already running via `docker compose up -d`! Check logs using
 
 ---
 
-## Configuration Deep Dive 🔧
+## Application Settings ⚙️
 
-Want to tweak the AI's voice, brain, or how it listens? Modify the Python files in the `code/` directory.
+Open **Settings** in the web interface to choose the AI provider and model, configure its endpoint, select the speech engine and voice, adjust speech speed, choose the transcription language and model, and customize the assistant prompt.
 
-**⚠️ Important Docker Note:** If using Docker, make any configuration changes *before* running `docker compose build` to ensure they are included in the image.
+Settings are saved locally in `code/data/settings.json` (or in the persistent `app_settings` Docker volume). Changes take effect after restarting the application. For Docker, restart with `docker compose restart app`.
 
-*   **TTS Engine & Voice (`server.py`, `audio_module.py`):**
-    *   Change `START_ENGINE` in `server.py` to `"coqui"`, `"kokoro"`, or `"orpheus"`.
-    *   Adjust engine-specific settings (e.g., voice model path for Coqui, speaker ID for Orpheus, speed) within `AudioProcessor.__init__` in `audio_module.py`.
-*   **LLM Backend & Model (`server.py`, `llm_module.py`):**
-    *   Set `LLM_START_PROVIDER` (`"ollama"` or `"openai"`) and `LLM_START_MODEL` (e.g., `"hf.co/..."` for Ollama, model name for OpenAI) in `server.py`. Remember to pull the Ollama model if using Docker (see Installation Step A3).
-    *   Customize the AI's personality by editing `system_prompt.txt`.
-*   **STT Settings (`transcribe.py`):**
-    *   Modify `DEFAULT_RECORDER_CONFIG` to change the Whisper model (`model`), language (`language`), silence thresholds (`silence_limit_seconds`), etc. The default `base.en` model is pre-downloaded during the Docker build.
-*   **Turn Detection Sensitivity (`turndetect.py`):**
-    *   Adjust pause duration constants within the `TurnDetector.update_settings` method.
+API keys are not stored in the settings file. Set `OPENAI_API_KEY` in the environment before starting the application when using the OpenAI provider. Ollama models must be available to the selected Ollama service; pull any missing model before restarting.
+
+For safety, the settings dashboard is available from the server computer at `http://localhost:8000`. The chat itself can still be opened from another device using the server's IP address.
+
+Advanced internal tuning still requires editing the relevant source files.
+
+### Advanced HTTPS configuration
+
+HTTPS requires editing the server and deployment configuration:
+
 *   **SSL/HTTPS (`server.py`):**
     *   Set `USE_SSL = True` and provide paths to your certificate (`SSL_CERT_PATH`) and key (`SSL_KEY_PATH`) files.
     *   **Docker Users:** You'll need to adjust `docker-compose.yml` to map the SSL port (e.g., 443) and potentially mount your certificate files as volumes.
