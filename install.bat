@@ -88,12 +88,12 @@ echo.
 echo Recommended: install Python 3.12 with the Python install manager:
 echo     py install 3.12
 echo Or download the Python 3.12 Windows installer (64-bit) from:
-echo https://www.python.org/downloads/release/python-31210/
+echo https://www.python.org/downloads/release/python-31216/
 echo Choose "Windows installer (64-bit)", not the embeddable package.
 echo In the installer, check "Add python.exe to PATH".
 choice /C YN /M "Open the official Python 3.12 download page now"
 if errorlevel 2 goto :python_done
-start "" "https://www.python.org/downloads/release/python-31210/"
+start "" "https://www.python.org/downloads/release/python-31216/"
 
 :python_done
 echo.
