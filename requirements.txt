@@ -5,6 +5,8 @@ realtimetts[kokoro,coqui,orpheus]==0.5.5
 # webserver dependencies
 fastapi
 uvicorn
+pydantic
+requests
 
 # configuration
 python-dotenv

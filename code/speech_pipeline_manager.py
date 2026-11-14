@@ -126,6 +126,8 @@ class SpeechPipelineManager:
             llm_model: str = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M",
             no_think: bool = False,
             orpheus_model: str = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf",
+            llm_base_url: Optional[str] = None,
+            llm_api_key: Optional[str] = None,
         ):
         """
         Initializes the SpeechPipelineManager.
@@ -162,9 +164,11 @@ class SpeechPipelineManager:
         self.generation_counter: int = 0
         self.abort_lock = threading.Lock()
         self.llm = LLM(
-            backend=self.llm_provider, # Or your backend
+            backend=self.llm_provider,
             model=self.llm_model,
             system_prompt=self.system_prompt,
+            api_key=llm_api_key,
+            base_url=llm_base_url,
             no_think=no_think,
         )
         self.llm.prewarm()

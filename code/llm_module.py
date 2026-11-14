@@ -190,7 +190,7 @@ class LLM:
     Handles client initialization, streaming generation, request cancellation,
     system prompts, and basic connection management including an optional `ollama ps` check.
     """
-    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio"]
+    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio", "openai_compatible"]
 
     def __init__(
         self,
@@ -223,8 +223,8 @@ class LLM:
 
         if self.backend == "ollama" and not REQUESTS_AVAILABLE:
              raise ImportError("requests library is required for the 'ollama' backend but not installed.")
-        if self.backend in ["openai", "lmstudio"] and not OPENAI_AVAILABLE:
-             raise ImportError("openai library is required for the 'openai'/'lmstudio' backends but not installed.")
+        if self.backend in ["openai", "lmstudio", "openai_compatible"] and not OPENAI_AVAILABLE:
+             raise ImportError("openai library is required for the OpenAI-compatible backends but not installed.")
 
         self.model = model
         self.system_prompt = system_prompt
@@ -245,7 +245,7 @@ class LLM:
         self.effective_openai_key = self._api_key or OPENAI_API_KEY
         self.effective_ollama_url = self._base_url or OLLAMA_BASE_URL if self.backend == "ollama" else None
         self.effective_lmstudio_url = self._base_url or LMSTUDIO_BASE_URL if self.backend == "lmstudio" else None
-        self.effective_openai_base_url = self._base_url if self.backend == "openai" and self._base_url else None
+        self.effective_openai_base_url = self._base_url if self.backend in ["openai", "openai_compatible"] and self._base_url else None
 
         if self.backend == "ollama" and self.effective_ollama_url:
              url = self.effective_ollama_url
@@ -292,8 +292,11 @@ class LLM:
             self._ollama_connection_ok = False # Reset Ollama specific flag
 
             try:
-                if self.backend == "openai":
-                    self.client = _create_openai_client(self.effective_openai_key, base_url=self.effective_openai_base_url)
+                if self.backend in ["openai", "openai_compatible"]:
+                    self.client = _create_openai_client(
+                        self.effective_openai_key or "local-key",
+                        base_url=self.effective_openai_base_url,
+                    )
                     init_ok = self.client is not None
                 elif self.backend == "lmstudio":
                     self.client = _create_openai_client(api_key="lmstudio-key", base_url=self.effective_lmstudio_url)
@@ -654,17 +657,17 @@ class LLM:
         stream_object_to_register = None # This is the object we need to close on cancel
 
         try:
-            if self.backend == "openai":
+            if self.backend in ["openai", "openai_compatible"]:
                 if self.client is None:
-                    raise RuntimeError("OpenAI client not initialized (should have been caught by lazy_init).")
+                    raise RuntimeError("OpenAI-compatible client not initialized (should have been caught by lazy_init).")
                 payload = { "model": self.model, "messages": messages, "stream": True, **kwargs }
-                logger.info(f"🤖💬 [{req_id}] Sending OpenAI request with payload:")
+                logger.info(f"🤖💬 [{req_id}] Sending OpenAI-compatible request with payload:")
                 logger.info(f"{json.dumps(payload, indent=2)}")
                 stream_iterator = self.client.chat.completions.create(
                     model=self.model, messages=messages, stream=True, **kwargs
                 )
-                stream_object_to_register = stream_iterator # The Stream object itself
-                self._register_request(req_id, "openai", stream_object_to_register)
+                stream_object_to_register = stream_iterator
+                self._register_request(req_id, self.backend, stream_object_to_register)
                 yield from self._yield_openai_chunks(stream_iterator, req_id)
 
             elif self.backend == "lmstudio":

@@ -146,6 +146,145 @@
       background: #a0a0a0;
       cursor: default;
     }
+    .settings-btn {
+      background: #2f526d;
+      padding: 8px 12px;
+      min-width: 94px;
+      font-size: 0.85rem;
+    }
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(14, 18, 24, 0.58);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 50;
+    }
+    .settings-dialog {
+      width: min(700px, 100%);
+      max-height: 88vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 26px 60px rgba(0, 0, 0, 0.22);
+      padding: 20px 20px 12px;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .settings-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .settings-close {
+      border: none;
+      background: transparent;
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #4a4a4a;
+    }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+    }
+    .settings-section {
+      padding: 16px;
+      border: 1px solid #ebedf0;
+      border-radius: 12px;
+      background: #fafafa;
+    }
+    .settings-field {
+      margin-bottom: 14px;
+    }
+    .settings-field label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #2e3a46;
+    }
+    .settings-field input,
+    .settings-field select,
+    .settings-field textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #d9dee6;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font: inherit;
+      background: white;
+    }
+    .settings-field textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    .settings-help {
+      margin: 6px 0 0;
+      color: #5d6773;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .settings-help.error { color: #b63e3e; }
+    .settings-help.success { color: #1e7f52; }
+    .provider-actions > div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .provider-actions button {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      background: #eef1f4;
+      color: #26323d;
+      font: inherit;
+      cursor: pointer;
+    }
+    .provider-actions button:disabled { opacity: 0.6; cursor: wait; }
+    .detected-providers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .settings-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 20px;
+      padding-top: 6px;
+    }
+    .settings-actions button {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-actions .secondary {
+      background: #eef1f4;
+      color: #26323d;
+    }
+    .settings-actions .primary {
+      background: var(--primary);
+      color: white;
+    }
+    .settings-feedback {
+      min-height: 1.2em;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+      color: #3d5d79;
+    }
+    .settings-feedback.error { color: #b63e3e; }
+    .settings-feedback.success { color: #1e7f52; }
+    .settings-feedback.notice { color: #824d19; }
     @media (max-width: 600px) {
       .chat-container {
         margin: 0;
@@ -243,6 +382,7 @@
         </svg>
         Real-Time Voice Chat
         <span class="status" id="status"></span>
+        <button id="settingsBtn" class="btn settings-btn" type="button">Settings</button>
       </div>
       <div class="messages" id="messages"></div>
       <div class="input-bar">
@@ -287,6 +427,104 @@
       </div>
     </div>
   </div>
+
+  <div id="settingsOverlay" class="settings-overlay" hidden>
+    <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="settings-header">
+         <h2 id="settingsTitle">Application settings</h2>
+         <button id="closeSettingsBtn" class="settings-close" type="button" aria-label="Close settings">&times;</button>
+      </div>
+      <div id="settingsFeedback" class="settings-feedback" role="status" aria-live="polite"></div>
+      <form id="settingsForm">
+         <div class="settings-grid">
+           <section class="settings-section">
+             <h3>AI model</h3>
+             <div class="settings-field">
+               <label for="llmProvider">Provider</label>
+               <select id="llmProvider" name="llm_provider">
+                 <option value="ollama">Ollama (recommended for local use)</option>
+                 <option value="openai">OpenAI / Azure API</option>
+                 <option value="lmstudio">LM Studio (local)</option>
+                 <option value="openai_compatible">Custom local server (OpenAI-compatible)</option>
+               </select>
+               <p id="llmProviderHelp" class="settings-help">Choose the model service you want to use.</p>
+             </div>
+             <div class="settings-field">
+               <label for="llmModel">Model name</label>
+               <input id="llmModel" name="llm_model" type="text" autocomplete="off" required>
+             </div>
+             <div class="settings-field">
+               <label for="llmBaseUrl">Provider URL</label>
+               <input id="llmBaseUrl" name="llm_base_url" type="text" autocomplete="off" placeholder="Uses the provider default when available">
+               <p id="llmBaseUrlHelp" class="settings-help">Leave blank for local defaults. This is required for custom OpenAI-compatible servers.</p>
+             </div>
+             <div class="settings-field provider-actions">
+               <div>
+                 <button class="secondary" id="detectProvidersBtn" type="button">Detect local providers</button>
+                 <button class="secondary" id="testProviderBtn" type="button">Test connection</button>
+               </div>
+               <p id="providerStatus" class="settings-help" role="status" aria-live="polite"></p>
+               <div id="detectedProviders" class="detected-providers"></div>
+             </div>
+           </section>
+
+           <section class="settings-section">
+             <h3>Voice and speech</h3>
+             <div class="settings-field">
+               <label for="ttsEngine">Speech engine</label>
+               <select id="ttsEngine" name="tts_engine">
+                 <option value="coqui">Coqui</option>
+                 <option value="kokoro">Kokoro</option>
+                 <option value="orpheus">Orpheus</option>
+               </select>
+             </div>
+             <div class="settings-field">
+               <label for="ttsModel">Speech model</label>
+               <input id="ttsModel" name="tts_model" type="text" autocomplete="off" required>
+             </div>
+             <div class="settings-field">
+               <label for="ttsVoice">Voice</label>
+               <input id="ttsVoice" name="tts_voice" type="text" autocomplete="off" required>
+             </div>
+             <div class="settings-field">
+               <label for="ttsSpeed">Speech speed</label>
+               <input id="ttsSpeed" name="tts_speed" type="range" min="0.5" max="2" step="0.05">
+             </div>
+           </section>
+
+           <section class="settings-section">
+             <h3>Listening</h3>
+             <div class="settings-field">
+               <label for="sttLanguage">Language code</label>
+               <input id="sttLanguage" name="stt_language" type="text" autocomplete="off" required>
+             </div>
+             <div class="settings-field">
+               <label for="sttModel">Transcription model</label>
+               <input id="sttModel" name="stt_model" type="text" autocomplete="off" required>
+             </div>
+             <div class="settings-field">
+               <label for="turnSpeed">Reply timing</label>
+               <input id="turnSpeed" name="turn_speed" type="range" min="0" max="100" step="1">
+             </div>
+           </section>
+
+           <section class="settings-section">
+             <h3>Assistant behavior</h3>
+             <div class="settings-field">
+               <label for="systemPrompt">System prompt</label>
+               <textarea id="systemPrompt" name="system_prompt"></textarea>
+             </div>
+           </section>
+         </div>
+
+         <div class="settings-actions">
+           <button class="secondary" id="cancelSettingsBtn" type="button">Close</button>
+           <button class="primary" id="saveSettingsBtn" type="submit">Save settings</button>
+         </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

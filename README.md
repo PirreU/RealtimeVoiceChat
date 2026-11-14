@@ -35,17 +35,16 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Real-Time Feedback:** See partial transcriptions and AI responses as they happen.
 *   **Low Latency Focus:** Optimized architecture using audio chunk streaming.
 *   **Smart Turn-Taking:** Dynamic silence detection (`turndetect.py`) adapts to the conversation pace.
-*   **Flexible AI Brains:** Pluggable LLM backends (Ollama default, OpenAI support via `llm_module.py`).
+*   **Flexible AI Brains:** Choose between Ollama, LM Studio, OpenAI, or a custom OpenAI-compatible local server.
 *   **Customizable Voices:** Choose from different Text-to-Speech engines (Kokoro, Coqui, Orpheus via `audio_module.py`).
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
-*   **Dockerized Deployment:** Recommended setup using Docker Compose for easier dependency management.
+*   **App-First Setup:** One local app, multiple AI backends, no forced Docker or installer-first workflow.
 
 ## Technology Stack 🛠️
 
 *   **Backend:** Python < 3.13, FastAPI
 *   **Frontend:** HTML, CSS, JavaScript (Vanilla JS, Web Audio API, AudioWorklets)
 *   **Communication:** WebSockets
-*   **Containerization:** Docker, Docker Compose
 *   **Core AI/ML Libraries:**
     *   `RealtimeSTT` (Speech-to-Text)
     *   `RealtimeTTS` (Text-to-Speech)
@@ -80,138 +79,27 @@ git clone https://github.com/KoljaB/RealtimeVoiceChat.git
 cd RealtimeVoiceChat
 ```
 
-Now, choose your adventure:
+Then install the Python dependencies and run the app as a single local client:
 
-<details>
-<summary><strong>🚀 Option A: Docker Installation (Recommended for Linux/GPU)</strong></summary>
+```bash
+python -m pip install -r requirements.txt
+python code/server.py
+```
 
-This is the most straightforward method, bundling the application, dependencies, and even Ollama into manageable containers.
-
-1.  **Build the Docker images:**
-    *(This takes time! It downloads base images, installs Python/ML dependencies, and pre-downloads the default STT model.)*
-    ```bash
-    docker compose build
-    ```
-    *(If you want to customize models/settings in `code/*.py`, do it **before** this step!)*
-
-2.  **Start the services (App & Ollama):**
-    *(Runs containers in the background. GPU access is configured in `docker-compose.yml`.)*
-    ```bash
-    docker compose up -d
-    ```
-    Give them a minute to initialize.
-
-3.  **(Crucial!) Pull your desired Ollama Model:**
-    *(This is done *after* startup to keep the main app image smaller and allow model changes without rebuilding. Execute this command to pull the default model into the running Ollama container.)*
-    ```bash
-    # Pull the default model (adjust if you configured a different one in server.py)
-    docker compose exec ollama ollama pull hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M
-
-    # (Optional) Verify the model is available
-    docker compose exec ollama ollama list
-    ```
-
-4.  **Stopping the Services:**
-    ```bash
-    docker compose down
-    ```
-
-5.  **Restarting:**
-    ```bash
-    docker compose up -d
-    ```
-
-6.  **Viewing Logs / Debugging:**
-    *   Follow app logs: `docker compose logs -f app`
-    *   Follow Ollama logs: `docker compose logs -f ollama`
-    *   Save logs to file: `docker compose logs app > app_logs.txt`
-
-</details>
-
-<details>
-<summary><strong>🛠️ Option B: Manual Installation (Windows Script / venv)</strong></summary>
-
-This method requires managing the Python environment yourself. It offers more direct control but can be trickier, especially regarding ML dependencies.
-
-**B1) Using the Windows Install Script:**
-
-1.  Ensure you meet the prerequisites (Python, potentially CUDA drivers).
-2.  Run the script. It attempts to create a venv, install PyTorch for CUDA 12.1, a compatible DeepSpeed wheel, and other requirements.
-    ```batch
-    install.bat
-    ```
-    *(This opens a new command prompt within the activated virtual environment.)*
-    Proceed to the **"Running the Application"** section.
-
-**B2) Manual Steps (Linux/macOS/Windows):**
-
-1.  **Create & Activate Virtual Environment:**
-    ```bash
-    python -m venv venv
-    # Linux/macOS:
-    source venv/bin/activate
-    # Windows:
-    .\venv\Scripts\activate
-    ```
-
-2.  **Upgrade Pip:**
-    ```bash
-    python -m pip install --upgrade pip
-    ```
-
-3.  **Navigate to Code Directory:**
-    ```bash
-    cd code
-    ```
-
-4.  **Install PyTorch (Crucial Step - Match Your Hardware!):**
-    *   **With NVIDIA GPU (CUDA 12.1 Example):**
-        ```bash
-        # Verify your CUDA version! Adjust 'cu121' and the URL if needed.
-        pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 torchvision --index-url https://download.pytorch.org/whl/cu121
-        ```
-    *   **CPU Only (Expect Slow Performance):**
-        ```bash
-        # pip install torch torchaudio torchvision
-        ```
-    *   *Find other PyTorch versions:* [https://pytorch.org/get-started/previous-versions/](https://pytorch.org/get-started/previous-versions/)
-
-5.  **Install Other Requirements:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *   **Note on DeepSpeed:** The `requirements.txt` may include DeepSpeed. Installation can be complex, especially on Windows. The `install.bat` tries a precompiled wheel. If manual installation fails, you might need to build it from source or consult resources like [deepspeedpatcher](https://github.com/erew123/deepspeedpatcher) (use at your own risk). Coqui TTS performance benefits most from DeepSpeed.
-
-</details>
+Open `http://localhost:8000` in your browser. In Settings, use **Detect local providers** to find Ollama or LM Studio, or select a provider manually. **Test connection** checks the selected provider before you save. This project is intentionally app-first: the app should work as one local interface with several supported backends instead of forcing a separate installer or server/client split.
 
 ---
 
 ## Running the Application ▶️
 
-**If using Docker:**
-Your application is already running via `docker compose up -d`! Check logs using `docker compose logs -f app`.
-
-**If using Manual/Script Installation:**
-
-1.  **Activate your virtual environment** (if not already active):
-    ```bash
-    # Linux/macOS: source ../venv/bin/activate
-    # Windows: ..\venv\Scripts\activate
-    ```
-2.  **Navigate to the `code` directory** (if not already there):
-    ```bash
-    cd code
-    ```
-3.  **Start the FastAPI server:**
-    ```bash
-    python server.py
-    ```
-
-**Accessing the Client (Both Methods):**
-
-1.  Open your web browser to `http://localhost:8000` (or your server's IP if running remotely/in Docker on another machine).
-2.  **Grant microphone permissions** when prompted.
-3.  Click **"Start"** to begin chatting! Use "Stop" to end and "Reset" to clear the conversation.
+1. Activate your environment if needed.
+2. Start the server:
+   ```bash
+   python code/server.py
+   ```
+3. Open `http://localhost:8000` in a browser.
+4. Grant microphone access when prompted.
+5. Click **Start** to begin chatting. Use **Stop** to end and **Reset** to clear the conversation.
 
 ---
 

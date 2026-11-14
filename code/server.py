@@ -15,32 +15,41 @@ import asyncio
 import struct
 import json
 import time
+import requests
 import threading # Keep threading for SpeechPipelineManager internals and AbortWorker
 import sys
 import os # Added for environment variable access
 
 from typing import Any, Dict, Optional, Callable # Added for type hints in docstrings
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, Response, FileResponse
 
-USE_SSL = False
-TTS_START_ENGINE = "orpheus"
-TTS_START_ENGINE = "kokoro"
-TTS_START_ENGINE = "coqui"
-TTS_ORPHEUS_MODEL = "Orpheus_3B-1BaseGGUF/mOrpheus_3B-1Base_Q4_K_M.gguf"
-TTS_ORPHEUS_MODEL = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf"
+from app_config import (
+    AppSettings,
+    ProviderProbeRequest,
+    load_settings,
+    save_settings,
+    settings_to_dict,
+    validate_settings,
+)
+from provider_diagnostics import detect_local_providers, probe_provider
 
-LLM_START_PROVIDER = "ollama"
-#LLM_START_MODEL = "qwen3:30b-a3b"
-LLM_START_MODEL = "hf.co/bartowski/huihui-ai_Mistral-Small-24B-Instruct-2501-abliterated-GGUF:Q4_K_M"
-# LLM_START_PROVIDER = "lmstudio"
-# LLM_START_MODEL = "Qwen3-30B-A3B-GGUF/Qwen3-30B-A3B-Q3_K_L.gguf"
+USE_SSL = False
+DEFAULT_SETTINGS = load_settings()
+TTS_START_ENGINE = DEFAULT_SETTINGS.tts_engine
+TTS_ORPHEUS_MODEL = DEFAULT_SETTINGS.tts_model
+
+LLM_START_PROVIDER = DEFAULT_SETTINGS.llm_provider
+LLM_START_MODEL = DEFAULT_SETTINGS.llm_model
+LLM_START_BASE_URL = DEFAULT_SETTINGS.llm_base_url or None
 NO_THINK = False
-DIRECT_STREAM = TTS_START_ENGINE=="orpheus"
+DIRECT_STREAM = TTS_START_ENGINE == "orpheus"
 
 if __name__ == "__main__":
     logger.info(f"🖥️⚙️ {Colors.apply('[PARAM]').blue} Starting engine: {Colors.apply(TTS_START_ENGINE).blue}")
@@ -115,22 +124,26 @@ async def lifespan(app: FastAPI):
         app: The FastAPI application instance.
     """
     logger.info("🖥️▶️ Server starting up")
-    # Initialize global components, not connection-specific state
+    settings = load_settings()
+    app.state.active_settings = settings_to_dict(settings)
+
     app.state.SpeechPipelineManager = SpeechPipelineManager(
-        tts_engine=TTS_START_ENGINE,
-        llm_provider=LLM_START_PROVIDER,
-        llm_model=LLM_START_MODEL,
+        tts_engine=settings.tts_engine,
+        llm_provider=settings.llm_provider,
+        llm_model=settings.llm_model,
         no_think=NO_THINK,
-        orpheus_model=TTS_ORPHEUS_MODEL,
+        orpheus_model=settings.tts_model,
+        llm_base_url=settings.llm_base_url or None,
+        llm_api_key=os.getenv("OPENAI_API_KEY"),
     )
 
     app.state.Upsampler = UpsampleOverlap()
     app.state.AudioInputProcessor = AudioInputProcessor(
-        LANGUAGE,
-        is_orpheus=TTS_START_ENGINE=="orpheus",
+        settings.stt_language,
+        is_orpheus=settings.tts_engine == "orpheus",
         pipeline_latency=app.state.SpeechPipelineManager.full_output_pipeline_latency / 1000, # seconds
     )
-    app.state.Aborting = False # Keep this? Its usage isn't clear in the provided snippet. Minimizing changes.
+    app.state.Aborting = False
 
     yield
 
@@ -177,6 +190,113 @@ async def get_index() -> HTMLResponse:
     with open("static/index.html", "r", encoding="utf-8") as f:
         html_content = f.read()
     return HTMLResponse(content=html_content)
+
+
+def require_local_settings_access(request: Request) -> None:
+    origin = request.headers.get("origin")
+    host = request.headers.get("host", "")
+    if origin:
+        try:
+            parsed_origin = urlsplit(origin)
+            origin_host = parsed_origin.hostname
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Open settings on the server computer using localhost.")
+        if (
+            parsed_origin.scheme not in {"http", "https"}
+            or parsed_origin.netloc.casefold() != host.casefold()
+            or origin_host is None
+        ):
+            raise HTTPException(status_code=403, detail="Open settings on the server computer using localhost.")
+        try:
+            is_local_origin = ip_address(origin_host).is_loopback
+        except ValueError:
+            is_local_origin = origin_host.casefold() == "localhost"
+        if not is_local_origin:
+            raise HTTPException(status_code=403, detail="Open settings on the server computer using localhost.")
+        return
+
+    client = request.client
+    try:
+        is_local_request = client is not None and ip_address(client.host).is_loopback
+    except ValueError:
+        is_local_request = False
+    if not is_local_request:
+        raise HTTPException(status_code=403, detail="Open settings on the server computer using localhost.")
+
+
+@app.get("/api/settings")
+async def get_settings(request: Request) -> dict:
+    require_local_settings_access(request)
+    settings = load_settings()
+    saved_settings = settings_to_dict(settings)
+    active_settings = getattr(app.state, "active_settings", saved_settings)
+    return {
+        "settings": saved_settings,
+        "restart_required": saved_settings != active_settings,
+        "openai_api_key_configured": bool(os.getenv("OPENAI_API_KEY")),
+    }
+
+
+@app.put("/api/settings")
+async def update_settings(settings: AppSettings, request: Request) -> dict:
+    require_local_settings_access(request)
+    try:
+        saved = save_settings(validate_settings(settings))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except OSError as error:
+        logger.exception("Failed to save application settings.")
+        raise HTTPException(status_code=500, detail="Could not save settings. Check the app folder permissions.") from error
+
+    saved_settings = settings_to_dict(saved)
+    active_settings = getattr(app.state, "active_settings", saved_settings)
+    return {
+        "settings": saved_settings,
+        "restart_required": saved_settings != active_settings,
+        "openai_api_key_configured": bool(os.getenv("OPENAI_API_KEY")),
+    }
+
+
+@app.post("/api/providers/detect")
+async def detect_providers(request: Request) -> dict:
+    require_local_settings_access(request)
+    return {"providers": detect_local_providers()}
+
+
+@app.post("/api/providers/test")
+async def test_provider_connection(payload: ProviderProbeRequest, request: Request) -> dict:
+    require_local_settings_access(request)
+    try:
+        validate_settings(
+            AppSettings(
+                llm_provider=payload.llm_provider,
+                llm_model=payload.llm_model,
+                llm_base_url=payload.llm_base_url,
+            )
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    if payload.llm_provider == "ollama":
+        base_url = payload.llm_base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    elif payload.llm_provider == "lmstudio":
+        base_url = payload.llm_base_url or os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1")
+    elif payload.llm_provider == "openai":
+        if not os.getenv("OPENAI_API_KEY"):
+            return {"ok": False, "message": "Set OPENAI_API_KEY before testing the OpenAI connection.", "models": []}
+        base_url = payload.llm_base_url or "https://api.openai.com/v1"
+    else:
+        base_url = payload.llm_base_url
+
+    return probe_provider(
+        payload.llm_provider,
+        base_url,
+        api_key=(
+            os.getenv("OPENAI_API_KEY")
+            if payload.llm_provider in {"openai", "openai_compatible"}
+            else None
+        ),
+    )
 
 # --------------------------------------------------------------------
 # Utility functions

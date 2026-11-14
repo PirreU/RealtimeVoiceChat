@@ -16,6 +16,25 @@
 const statusDiv = document.getElementById("status");
 const messagesDiv = document.getElementById("messages");
 const speedSlider = document.getElementById("speedSlider");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const settingsForm = document.getElementById("settingsForm");
+const settingsFeedback = document.getElementById("settingsFeedback");
+const llmProviderSelect = document.getElementById("llmProvider");
+const llmBaseUrlInput = document.getElementById("llmBaseUrl");
+const ttsEngineSelect = document.getElementById("ttsEngine");
+const ttsSpeedInput = document.getElementById("ttsSpeed");
+const turnSpeedInput = document.getElementById("turnSpeed");
+const providerStatus = document.getElementById("providerStatus");
+const detectedProviders = document.getElementById("detectedProviders");
+
+const PROVIDER_HELP = {
+  ollama: "Use this if Ollama is running on your computer. It usually listens on http://localhost:11434.",
+  openai: "Use this for OpenAI or Microsoft Azure OpenAI. Set OPENAI_API_KEY in the server environment first.",
+  lmstudio: "Use this if LM Studio is running locally and exposing an OpenAI-compatible endpoint.",
+  openai_compatible: "Use this for llama.cpp, custom local servers, or any OpenAI-compatible endpoint running on your machine."
+};
+
 speedSlider.disabled = true;  // start disabled
 
 let socket = null;
@@ -183,6 +202,210 @@ function cleanupAudio() {
     mediaStream = null;
   }
 }
+
+function setSettingsFeedback(message, state = "") {
+  settingsFeedback.textContent = message;
+  settingsFeedback.className = state ? `settings-feedback ${state}` : "settings-feedback";
+}
+
+function updateProviderHelp() {
+  const help = PROVIDER_HELP[llmProviderSelect.value] || "Choose the model service you want to use.";
+  document.getElementById("llmProviderHelp").textContent = help;
+  const baseUrlPlaceholder = {
+    ollama: "Leave blank to use the default local Ollama endpoint.",
+    openai: "Optional: only use this for a custom OpenAI-compatible proxy.",
+    lmstudio: "Leave blank to use the default local LM Studio endpoint.",
+    openai_compatible: "Required. Enter the base URL for your local OpenAI-compatible API, commonly ending in /v1."
+  }[llmProviderSelect.value] || "Use the address reachable from this app.";
+  llmBaseUrlInput.placeholder = baseUrlPlaceholder;
+  const isGenericLocal = llmProviderSelect.value === "openai_compatible";
+  llmBaseUrlInput.required = isGenericLocal;
+  document.getElementById("llmBaseUrlHelp").textContent = isGenericLocal
+    ? "Required. Enter the OpenAI-compatible API base URL reachable from this app, commonly ending in /v1. Works with llama.cpp and similar local servers."
+    : "For local providers, leave this blank to use the default endpoint. For cloud APIs, set it only if you need a custom proxy.";
+}
+
+function updateSettingsFields(settings) {
+  llmProviderSelect.value = settings.llm_provider;
+  document.getElementById("llmModel").value = settings.llm_model || "";
+  llmBaseUrlInput.value = settings.llm_base_url || "";
+  ttsEngineSelect.value = settings.tts_engine;
+  document.getElementById("ttsModel").value = settings.tts_model || "";
+  document.getElementById("ttsVoice").value = settings.tts_voice || "";
+  ttsSpeedInput.value = settings.tts_speed ?? 1.1;
+  document.getElementById("sttLanguage").value = settings.stt_language || "en";
+  document.getElementById("sttModel").value = settings.stt_model || "base.en";
+  turnSpeedInput.value = settings.turn_speed ?? 0;
+  document.getElementById("systemPrompt").value = settings.system_prompt || "";
+  updateProviderHelp();
+}
+
+function showDetectedProviders(providers) {
+  detectedProviders.replaceChildren();
+  providerStatus.className = "settings-help";
+  if (!providers.length) {
+    providerStatus.textContent = "No local providers were found. Start Ollama or LM Studio and try again.";
+    return;
+  }
+
+  providerStatus.textContent = "Local providers found. Select one to use it.";
+  providers.forEach((provider) => {
+    const button = document.createElement("button");
+    const providerName = provider.provider === "ollama" ? "Ollama" : "LM Studio";
+    const modelSummary = provider.models.length ? ` — ${provider.models.join(", ")}` : "";
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = `${providerName}${modelSummary}`;
+    button.addEventListener("click", () => {
+      llmProviderSelect.value = provider.provider;
+      llmBaseUrlInput.value = provider.base_url;
+      if (provider.models.length) {
+        document.getElementById("llmModel").value = provider.models[0];
+      }
+      updateProviderHelp();
+      providerStatus.textContent = `${providerName} selected. Save settings to keep this choice.`;
+    });
+    detectedProviders.appendChild(button);
+  });
+}
+
+async function openSettings() {
+  settingsOverlay.hidden = false;
+  setSettingsFeedback("Loading settings...");
+  try {
+    const response = await fetch("/api/settings");
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load settings.");
+    }
+    updateSettingsFields(data.settings);
+    detectedProviders.replaceChildren();
+    providerStatus.textContent = "";
+    setSettingsFeedback("");
+  } catch (error) {
+    setSettingsFeedback(error.message || "Could not load settings.", "error");
+  }
+}
+
+async function detectLocalProviders() {
+  const button = document.getElementById("detectProvidersBtn");
+  button.disabled = true;
+  detectedProviders.replaceChildren();
+  providerStatus.className = "settings-help";
+  providerStatus.textContent = "Checking the usual local Ollama and LM Studio addresses...";
+  try {
+    const response = await fetch("/api/providers/detect", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not check for local providers.");
+    }
+    showDetectedProviders(data.providers);
+  } catch (error) {
+    providerStatus.textContent = error.message || "Could not check for local providers.";
+    providerStatus.className = "settings-help error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testProviderConnection() {
+  const button = document.getElementById("testProviderBtn");
+  button.disabled = true;
+  providerStatus.className = "settings-help";
+  providerStatus.textContent = "Testing provider connection...";
+  try {
+    const response = await fetch("/api/providers/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        llm_provider: llmProviderSelect.value,
+        llm_model: document.getElementById("llmModel").value.trim(),
+        llm_base_url: llmBaseUrlInput.value.trim()
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not test the provider connection.");
+    }
+    const modelListed = data.models.includes(document.getElementById("llmModel").value.trim());
+    providerStatus.textContent = data.ok
+      ? `${data.message}${data.models.length && !modelListed ? " The selected model was not listed by the provider." : ""}`
+      : data.message;
+    providerStatus.className = data.ok ? "settings-help success" : "settings-help error";
+  } catch (error) {
+    providerStatus.textContent = error.message || "Could not test the provider connection.";
+    providerStatus.className = "settings-help error";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function closeSettings() {
+  settingsOverlay.hidden = true;
+  setSettingsFeedback("");
+  providerStatus.textContent = "";
+  providerStatus.className = "settings-help";
+}
+
+settingsBtn.addEventListener("click", openSettings);
+llmProviderSelect.addEventListener("change", updateProviderHelp);
+document.getElementById("detectProvidersBtn").addEventListener("click", detectLocalProviders);
+document.getElementById("testProviderBtn").addEventListener("click", testProviderConnection);
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettings();
+  }
+});
+
+document.getElementById("closeSettingsBtn").addEventListener("click", closeSettings);
+document.getElementById("cancelSettingsBtn").addEventListener("click", closeSettings);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !settingsOverlay.hidden) {
+    closeSettings();
+  }
+});
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const saveButton = document.getElementById("saveSettingsBtn");
+  saveButton.disabled = true;
+  const settingsPayload = {
+    llm_provider: llmProviderSelect.value,
+    llm_model: document.getElementById("llmModel").value.trim(),
+    llm_base_url: llmBaseUrlInput.value.trim(),
+    tts_engine: ttsEngineSelect.value,
+    tts_model: document.getElementById("ttsModel").value.trim(),
+    tts_voice: document.getElementById("ttsVoice").value.trim(),
+    tts_speed: Number(ttsSpeedInput.value),
+    turn_speed: Number(turnSpeedInput.value),
+    stt_language: document.getElementById("sttLanguage").value.trim(),
+    stt_model: document.getElementById("sttModel").value.trim(),
+    system_prompt: document.getElementById("systemPrompt").value
+  };
+
+  setSettingsFeedback("Saving settings...");
+  try {
+    const response = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settingsPayload)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not save settings.");
+    }
+    updateSettingsFields(data.settings);
+    setSettingsFeedback(
+      data.restart_required ? "Settings saved. Restart the app to apply them." : "Settings saved.",
+      data.restart_required ? "notice" : "success"
+    );
+  } catch (error) {
+    setSettingsFeedback(error.message || "Could not save settings.", "error");
+  } finally {
+    saveButton.disabled = false;
+  }
+});
 
 function renderMessages() {
   messagesDiv.innerHTML = "";
