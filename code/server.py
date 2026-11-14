@@ -19,6 +19,7 @@ import requests
 import threading # Keep threading for SpeechPipelineManager internals and AbortWorker
 import sys
 import os # Added for environment variable access
+from pathlib import Path
 
 from typing import Any, Dict, Optional, Callable # Added for type hints in docstrings
 from contextlib import asynccontextmanager
@@ -48,6 +49,7 @@ TTS_ORPHEUS_MODEL = DEFAULT_SETTINGS.tts_model
 LLM_START_PROVIDER = DEFAULT_SETTINGS.llm_provider
 LLM_START_MODEL = DEFAULT_SETTINGS.llm_model
 LLM_START_BASE_URL = DEFAULT_SETTINGS.llm_base_url or None
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 NO_THINK = False
 DIRECT_STREAM = TTS_START_ENGINE == "orpheus"
 
@@ -165,7 +167,7 @@ app.add_middleware(
 )
 
 # Mount static files with no cache
-app.mount("/static", NoCacheStaticFiles(directory="static"), name="static")
+app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -175,7 +177,7 @@ async def favicon():
     Returns:
         A FileResponse containing the favicon.
     """
-    return FileResponse("static/favicon.ico")
+    return FileResponse(STATIC_DIR / "favicon.ico")
 
 @app.get("/")
 async def get_index() -> HTMLResponse:
@@ -187,8 +189,7 @@ async def get_index() -> HTMLResponse:
     Returns:
         An HTMLResponse containing the content of index.html.
     """
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        html_content = f.read()
+    html_content = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     return HTMLResponse(content=html_content)
 
 

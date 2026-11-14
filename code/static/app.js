@@ -325,11 +325,15 @@ async function testProviderConnection() {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Could not test the provider connection.");
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map(error => error.msg).join(" ")
+        : data.detail;
+      throw new Error(detail || "Could not test the provider connection.");
     }
-    const modelListed = data.models.includes(document.getElementById("llmModel").value.trim());
+    const models = Array.isArray(data.models) ? data.models : [];
+    const modelListed = models.includes(document.getElementById("llmModel").value.trim());
     providerStatus.textContent = data.ok
-      ? `${data.message}${data.models.length && !modelListed ? " The selected model was not listed by the provider." : ""}`
+      ? `${data.message}${models.length && !modelListed ? " The selected model was not listed by the provider." : ""}`
       : data.message;
     providerStatus.className = data.ok ? "settings-help success" : "settings-help error";
   } catch (error) {
