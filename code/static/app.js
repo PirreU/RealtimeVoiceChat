@@ -34,6 +34,13 @@ const turnSpeedInput = document.getElementById("turnSpeed");
 const llmProviderSelect = document.getElementById("llmProvider");
 const llmBaseUrlInput = document.getElementById("llmBaseUrl");
 
+const PROVIDER_HELP = {
+  ollama: "Use this if Ollama is running on your computer. It usually listens on http://localhost:11434.",
+  openai: "Use this for OpenAI or a compatible cloud service. Set OPENAI_API_KEY in the server environment before starting the app.",
+  lmstudio: "Use this if LM Studio is running locally and offers an OpenAI-compatible endpoint.",
+  openai_compatible: "Use this for llama.cpp, custom local servers, or any OpenAI-compatible endpoint running on your machine."
+};
+
 const THEME_STORAGE_KEY = "rvchatThemePreference";
 const THEME_PREFERENCES = ["system", "light", "dark"];
 let themePreference = "system";
@@ -98,10 +105,19 @@ function updateTtsVoiceHelp() {
 
 function updateProviderHelp() {
   const isGenericLocal = llmProviderSelect.value === "openai_compatible";
+  const providerHelp = PROVIDER_HELP[llmProviderSelect.value] || "Choose the model service you want to use.";
+  document.getElementById("llmProviderHelp").textContent = providerHelp;
   llmBaseUrlInput.required = isGenericLocal;
+  const baseUrlPlaceholder = {
+    ollama: "Leave blank to use the default local Ollama endpoint.",
+    openai: "Optional: only use this for a custom OpenAI-compatible proxy.",
+    lmstudio: "Leave blank to use the default local LM Studio endpoint.",
+    openai_compatible: "Required. Enter the base URL for your local OpenAI-compatible API, commonly ending in /v1."
+  }[llmProviderSelect.value] || "Use the address reachable from this app.";
+  llmBaseUrlInput.placeholder = baseUrlPlaceholder;
   document.getElementById("llmBaseUrlHelp").textContent = isGenericLocal
-    ? "Required. Enter the OpenAI-compatible API base URL reachable from this app, commonly ending in /v1. Works with llama.cpp server and similar tools."
-    : "Use the address reachable from the app server. For Ollama or LM Studio, leave blank to use its default address.";
+    ? "Required. Enter the OpenAI-compatible API base URL reachable from this app, commonly ending in /v1. Works with llama.cpp and similar local servers."
+    : "For local providers, leave this blank to use the default endpoint. For cloud APIs, set it only if you need a custom proxy.";
 }
 
 function updateSettingsFields(settings) {

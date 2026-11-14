@@ -19,13 +19,13 @@ https://github.com/user-attachments/assets/16cc29a7-bec2-4dd0-a056-d213db798d8f
 
 ## What's Under the Hood?
 
-A sophisticated client-server system built for low-latency interaction:
+A lightweight local app for real-time voice chat with flexible AI backends:
 
 1.  🎙️ **Capture:** Your voice is captured by your browser.
-2.  ➡️ **Stream:** Audio chunks are whisked away via WebSockets to a Python backend.
-3.  ✍️ **Transcribe:** `RealtimeSTT` rapidly converts your speech to text.
-4.  🤔 **Think:** The text is sent to an LLM (like Ollama or OpenAI) for processing.
-5.  🗣️ **Synthesize:** The AI's text response is turned back into speech using `RealtimeTTS`.
+2.  ➡️ **Stream:** Audio chunks are sent to a local Python backend.
+3.  ✍️ **Transcribe:** `RealtimeSTT` converts your speech to text.
+4.  🤔 **Think:** The text is sent to an LLM (like Ollama, LM Studio, or OpenAI-compatible backends) for processing.
+5.  🗣️ **Synthesize:** The AI response is turned back into speech using `RealtimeTTS`.
 6.  ⬅️ **Return:** The generated audio is streamed back to your browser for playback.
 7.  🔄 **Interrupt:** Jump in anytime! The system handles interruptions gracefully.
 
@@ -40,13 +40,14 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
 ## Quick Start 🧭
 
-If this is your first time using the project, use the server/client installer:
+If this is your first time using the project, start the app and choose your AI provider in Settings. Most users can begin with a local Ollama setup, LM Studio, or another OpenAI-compatible service.
 
-1. On Windows, run `dist\RealTimeVoiceChatInstaller.exe` and choose **Server** or **Client**. On Linux/macOS, run `bash install.sh` and choose a role.
-2. On Windows, start the installed server from the **Real-Time Voice Chat Server** desktop shortcut. Its console displays startup errors and stays open when the server stops; press Ctrl+C to stop the server, then Enter to close the console. On Linux/macOS, activate the created environment, change to `code/`, and run `python server.py`.
-3. Trust the generated CA certificate, then open `https://localhost:8000` on the server computer. Client devices use the HTTPS URL and access token printed by the server installer.
+1. Clone the repository and install the Python dependencies.
+2. Start the app by running `python code/server.py` from the project root.
+3. Open `http://localhost:8000` in a browser.
+4. In the Settings dialog, pick your provider and model, then save the configuration.
 
-To build the standalone Windows GUI executable from source, run `build_windows_installer.bat` on a Windows machine with Python 3.11. The server setup downloads a managed Python 3.11 runtime and AI dependencies, so it still requires an internet connection and several GB of disk space.
+This app is designed as a single local client with multiple AI backends rather than a separate server/client product split. If you want a packaged Windows installer later, it should be built around a stable app-first workflow, not before the core setup experience is simple.
 
 ## Technology Stack 🛠️
 

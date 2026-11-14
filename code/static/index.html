@@ -656,11 +656,12 @@
             <div class="settings-field">
               <label for="llmProvider">Provider</label>
               <select id="llmProvider" name="llm_provider">
-                <option value="ollama">Ollama (local)</option>
-                <option value="openai">OpenAI</option>
+                <option value="ollama">Ollama (recommended for local use)</option>
+                <option value="openai">OpenAI / Azure API</option>
                 <option value="lmstudio">LM Studio (local)</option>
-                <option value="openai_compatible">Other local server (OpenAI-compatible)</option>
+                <option value="openai_compatible">Custom local server (OpenAI-compatible)</option>
               </select>
+              <p id="llmProviderHelp" class="settings-help">Choose the model service you want to use.</p>
             </div>
             <div class="settings-field">
               <label for="llmModel">Model name</label>
