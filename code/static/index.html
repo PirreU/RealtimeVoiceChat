@@ -251,6 +251,13 @@
       cursor: pointer;
     }
     .provider-actions button:disabled { opacity: 0.6; cursor: wait; }
+    .provider-actions [hidden] { display: none; }
+    .provider-advanced summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #2e3a46;
+    }
+    .provider-advanced[open] summary { margin-bottom: 12px; }
     .detected-providers {
       display: flex;
       flex-wrap: wrap;
@@ -456,18 +463,23 @@
                <label for="llmModel">Model name</label>
                <input id="llmModel" name="llm_model" type="text" autocomplete="off" required>
              </div>
-             <div class="settings-field">
-               <label for="llmBaseUrl">Provider URL</label>
-               <input id="llmBaseUrl" name="llm_base_url" type="text" autocomplete="off" placeholder="Uses the provider default when available">
-               <p id="llmBaseUrlHelp" class="settings-help">Leave blank for local defaults. This is required for custom OpenAI-compatible servers.</p>
-             </div>
+             <details id="providerAdvancedSettings" class="provider-advanced">
+               <summary>Advanced connection options</summary>
+               <div class="settings-field">
+                 <label for="llmBaseUrl">Custom provider address</label>
+                 <input id="llmBaseUrl" name="llm_base_url" type="text" autocomplete="off" placeholder="Leave blank for automatic local detection">
+                 <p id="llmBaseUrlHelp" class="settings-help">Normally leave this blank. Use it only for a custom provider address.</p>
+               </div>
+             </details>
              <div class="settings-field provider-actions">
                <div>
-                 <button class="secondary" id="detectProvidersBtn" type="button">Detect local providers</button>
+                 <button class="secondary" id="detectProvidersBtn" type="button">Find models on this computer</button>
                  <button class="secondary" id="testProviderBtn" type="button">Test connection</button>
                </div>
                <p id="providerStatus" class="settings-help" role="status" aria-live="polite"></p>
                <div id="detectedProviders" class="detected-providers"></div>
+               <label id="availableModelsLabel" for="availableModelsSelect" class="settings-help" hidden>Available models</label>
+               <select id="availableModelsSelect" aria-describedby="availableModelsLabel" hidden></select>
              </div>
            </section>
 

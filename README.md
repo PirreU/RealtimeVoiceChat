@@ -62,7 +62,7 @@ This project leverages powerful AI models, which have some requirements:
     *   **Manual:** The provided script (`install.bat`) is for Windows. Manual steps are possible on Linux/macOS but may require more troubleshooting (especially for DeepSpeed).
 *   **🐍 Python:** 3.9 or higher (if setting up manually).
 *   **🚀 GPU:** **A powerful CUDA-enabled NVIDIA GPU is *highly recommended***, especially for faster STT (Whisper) and TTS (Coqui). Performance on CPU-only or weaker GPUs will be significantly slower.
-    *   The setup assumes **CUDA 12.1**. Adjust PyTorch installation if you have a different CUDA version.
+    *   The Windows installer uses the project's Python requirements without assuming a specific CUDA version. GPU acceleration may require installing a PyTorch build that matches your hardware.
     *   **Docker (Linux):** Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 *   **🐳 Docker (Optional but Recommended):** Docker Engine and Docker Compose v2+ for the containerized setup.
 *   **🧠 Ollama (Optional):** If using the Ollama backend *without* Docker, install it separately and pull your desired models. The Docker setup includes an Ollama service.
@@ -79,14 +79,16 @@ git clone https://github.com/KoljaB/RealtimeVoiceChat.git
 cd RealtimeVoiceChat
 ```
 
-Then install the Python dependencies and run the app as a single local client:
+On Windows, run `install.bat` once to create a private Python environment and install the app dependencies. Then run `start_venv.bat` and start the app from that terminal with `python code\server.py`.
+
+For a manual setup (including other platforms), install the Python dependencies and run the app as a single local client:
 
 ```bash
 python -m pip install -r requirements.txt
 python code/server.py
 ```
 
-Open `http://localhost:8000` in your browser. In Settings, use **Detect local providers** to find Ollama or LM Studio, or select a provider manually. **Test connection** checks the selected provider before you save. This project is intentionally app-first: the app should work as one local interface with several supported backends instead of forcing a separate installer or server/client split.
+Open the local app in your browser. In Settings, use **Find models on this computer** to detect Ollama or LM Studio, or select a provider manually. No provider address is needed for the usual local setup. **Test connection** checks the selected provider before you save. Advanced connection settings remain available for custom model servers. This project is intentionally app-first: the app should work as one local interface with several supported backends instead of forcing a separate installer or server/client split.
 
 ---
 

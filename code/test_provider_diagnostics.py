@@ -41,9 +41,11 @@ def test_probe_provider_reports_http_errors():
 
 def test_detect_only_returns_reachable_local_providers():
     def fake_get(url, **_kwargs):
-        if "11434" in url:
+        if url.endswith("/api/tags"):
             return FakeResponse(200, {"models": [{"name": "ollama-model"}]})
-        raise requests.ConnectionError("not running")
+        if url.endswith("/models"):
+            return FakeResponse(200, {"data": [{"id": "lmstudio-model"}]})
+        raise requests.ConnectionError("unexpected provider")
 
     result = detect_local_providers(get=fake_get)
 
@@ -52,5 +54,10 @@ def test_detect_only_returns_reachable_local_providers():
             "provider": "ollama",
             "base_url": "",
             "models": ["ollama-model"],
-        }
+        },
+        {
+            "provider": "lmstudio",
+            "base_url": "",
+            "models": ["lmstudio-model"],
+        },
     ]

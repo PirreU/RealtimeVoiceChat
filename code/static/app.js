@@ -22,17 +22,20 @@ const settingsForm = document.getElementById("settingsForm");
 const settingsFeedback = document.getElementById("settingsFeedback");
 const llmProviderSelect = document.getElementById("llmProvider");
 const llmBaseUrlInput = document.getElementById("llmBaseUrl");
+const providerAdvancedSettings = document.getElementById("providerAdvancedSettings");
 const ttsEngineSelect = document.getElementById("ttsEngine");
 const ttsSpeedInput = document.getElementById("ttsSpeed");
 const turnSpeedInput = document.getElementById("turnSpeed");
 const providerStatus = document.getElementById("providerStatus");
 const detectedProviders = document.getElementById("detectedProviders");
+const availableModelsSelect = document.getElementById("availableModelsSelect");
+const availableModelsLabel = document.getElementById("availableModelsLabel");
 
 const PROVIDER_HELP = {
-  ollama: "Use this if Ollama is running on your computer. It usually listens on http://localhost:11434.",
+  ollama: "Use this if Ollama is running on this computer. The app can look for it automatically.",
   openai: "Use this for OpenAI or Microsoft Azure OpenAI. Set OPENAI_API_KEY in the server environment first.",
   lmstudio: "Use this if LM Studio is running locally and exposing an OpenAI-compatible endpoint.",
-  openai_compatible: "Use this for llama.cpp, custom local servers, or any OpenAI-compatible endpoint running on your machine."
+  openai_compatible: "Use this for llama.cpp or another custom OpenAI-compatible model service."
 };
 
 speedSlider.disabled = true;  // start disabled
@@ -212,17 +215,18 @@ function updateProviderHelp() {
   const help = PROVIDER_HELP[llmProviderSelect.value] || "Choose the model service you want to use.";
   document.getElementById("llmProviderHelp").textContent = help;
   const baseUrlPlaceholder = {
-    ollama: "Leave blank to use the default local Ollama endpoint.",
+    ollama: "Optional: enter a custom provider address.",
     openai: "Optional: only use this for a custom OpenAI-compatible proxy.",
-    lmstudio: "Leave blank to use the default local LM Studio endpoint.",
-    openai_compatible: "Required. Enter the base URL for your local OpenAI-compatible API, commonly ending in /v1."
-  }[llmProviderSelect.value] || "Use the address reachable from this app.";
+    lmstudio: "Optional: enter a custom provider address.",
+    openai_compatible: "Required for a custom OpenAI-compatible service."
+  }[llmProviderSelect.value] || "Enter a custom provider address.";
   llmBaseUrlInput.placeholder = baseUrlPlaceholder;
   const isGenericLocal = llmProviderSelect.value === "openai_compatible";
+  providerAdvancedSettings.open = isGenericLocal || Boolean(llmBaseUrlInput.value.trim());
   llmBaseUrlInput.required = isGenericLocal;
   document.getElementById("llmBaseUrlHelp").textContent = isGenericLocal
-    ? "Required. Enter the OpenAI-compatible API base URL reachable from this app, commonly ending in /v1. Works with llama.cpp and similar local servers."
-    : "For local providers, leave this blank to use the default endpoint. For cloud APIs, set it only if you need a custom proxy.";
+    ? "Enter the address for your custom model service."
+    : "Normally leave this blank. Use it only for a custom provider address or proxy.";
 }
 
 function updateSettingsFields(settings) {
@@ -263,10 +267,49 @@ function showDetectedProviders(providers) {
         document.getElementById("llmModel").value = provider.models[0];
       }
       updateProviderHelp();
+      clearAvailableModels();
       providerStatus.textContent = `${providerName} selected. Save settings to keep this choice.`;
     });
     detectedProviders.appendChild(button);
   });
+}
+
+function clearAvailableModels() {
+  availableModelsSelect.replaceChildren();
+  availableModelsLabel.hidden = true;
+}
+
+function showAvailableModels(models) {
+  clearAvailableModels();
+  if (!models.length) {
+    return;
+  }
+
+  availableModelsLabel.textContent = `Available models (${models.length})`;
+  availableModelsLabel.hidden = false;
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choose a model...";
+  availableModelsSelect.appendChild(placeholder);
+
+  models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    availableModelsSelect.appendChild(option);
+  });
+
+  const currentModel = document.getElementById("llmModel").value.trim();
+  if (models.includes(currentModel)) {
+    availableModelsSelect.value = currentModel;
+  }
+  availableModelsSelect.hidden = false;
+}
+
+function clearProviderTestResult() {
+  clearAvailableModels();
+  providerStatus.textContent = "";
+  providerStatus.className = "settings-help";
 }
 
 async function openSettings() {
@@ -280,6 +323,7 @@ async function openSettings() {
     }
     updateSettingsFields(data.settings);
     detectedProviders.replaceChildren();
+    clearAvailableModels();
     providerStatus.textContent = "";
     setSettingsFeedback("");
   } catch (error) {
@@ -291,8 +335,9 @@ async function detectLocalProviders() {
   const button = document.getElementById("detectProvidersBtn");
   button.disabled = true;
   detectedProviders.replaceChildren();
+  clearAvailableModels();
   providerStatus.className = "settings-help";
-  providerStatus.textContent = "Checking the usual local Ollama and LM Studio addresses...";
+  providerStatus.textContent = "Searching this computer for Ollama and LM Studio...";
   try {
     const response = await fetch("/api/providers/detect", { method: "POST" });
     const data = await response.json();
@@ -311,6 +356,7 @@ async function detectLocalProviders() {
 async function testProviderConnection() {
   const button = document.getElementById("testProviderBtn");
   button.disabled = true;
+  clearAvailableModels();
   providerStatus.className = "settings-help";
   providerStatus.textContent = "Testing provider connection...";
   try {
@@ -333,9 +379,12 @@ async function testProviderConnection() {
     const models = Array.isArray(data.models) ? data.models : [];
     const modelListed = models.includes(document.getElementById("llmModel").value.trim());
     providerStatus.textContent = data.ok
-      ? `${data.message}${models.length && !modelListed ? " The selected model was not listed by the provider." : ""}`
+      ? `${data.message}${models.length ? (modelListed ? "" : " The selected model was not listed by the provider.") : " The provider returned no models."}`
       : data.message;
     providerStatus.className = data.ok ? "settings-help success" : "settings-help error";
+    if (data.ok) {
+      showAvailableModels(models);
+    }
   } catch (error) {
     providerStatus.textContent = error.message || "Could not test the provider connection.";
     providerStatus.className = "settings-help error";
@@ -347,14 +396,27 @@ async function testProviderConnection() {
 function closeSettings() {
   settingsOverlay.hidden = true;
   setSettingsFeedback("");
+  clearAvailableModels();
   providerStatus.textContent = "";
   providerStatus.className = "settings-help";
 }
 
 settingsBtn.addEventListener("click", openSettings);
-llmProviderSelect.addEventListener("change", updateProviderHelp);
+llmProviderSelect.addEventListener("change", () => {
+  updateProviderHelp();
+  clearProviderTestResult();
+});
+llmBaseUrlInput.addEventListener("input", clearProviderTestResult);
 document.getElementById("detectProvidersBtn").addEventListener("click", detectLocalProviders);
 document.getElementById("testProviderBtn").addEventListener("click", testProviderConnection);
+availableModelsSelect.addEventListener("change", () => {
+  if (!availableModelsSelect.value) {
+    return;
+  }
+  document.getElementById("llmModel").value = availableModelsSelect.value;
+  providerStatus.textContent = `${availableModelsSelect.value} selected. Save settings to keep this choice.`;
+  providerStatus.className = "settings-help";
+});
 settingsOverlay.addEventListener("click", (event) => {
   if (event.target === settingsOverlay) {
     closeSettings();

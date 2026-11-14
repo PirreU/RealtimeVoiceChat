@@ -77,7 +77,7 @@ def detect_local_providers(
             detected.append(
                 {
                     "provider": provider,
-                    "base_url": "" if provider == "ollama" else base_url,
+                    "base_url": "",
                     "models": result["models"],
                 }
             )
