@@ -12,8 +12,8 @@ certifi
 # Generate HTTPS certificates for LAN server mode
 cryptography
 
-# Coqui TTS 0.26 requires Transformers >=4.47 and imports BeamSearchScorer from its root package.
-transformers>=4.47,<4.54
+# Coqui XTTS 0.26 needs the generation API inherited by PreTrainedModel in Transformers 4.50.x.
+transformers==4.50.3
 
 # OpenAI-compatible LLM providers
 openai

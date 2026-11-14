@@ -180,8 +180,18 @@ class SpeechPipelineManager:
             no_think=no_think,
             base_url=llm_base_url,
         )
-        self.llm.prewarm()
+        if not self.llm.prewarm():
+            raise RuntimeError(
+                f"LLM backend '{self.llm_provider}' failed startup prewarm for "
+                f"model '{self.llm_model}'. Verify that the backend service is "
+                "running, its base URL is reachable, and the model is available."
+            )
         self.llm_inference_time = self.llm.measure_inference_time()
+        if self.llm_inference_time is None:
+            raise RuntimeError(
+                f"LLM backend '{self.llm_provider}' did not produce a measurable "
+                "response during startup."
+            )
         logger.debug(f"🗣️🧠🕒 LLM inference time: {self.llm_inference_time:.2f}ms")
 
         # --- State ---

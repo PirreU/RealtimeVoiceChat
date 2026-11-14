@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 import tempfile
@@ -8,8 +9,10 @@ from unittest import mock
 from windows_gui_installer import (
     _is_vc_redist_x64_installed,
     _initial_window_geometry,
+    configure_llm_endpoint,
     create_server_desktop_shortcut,
     validate_lan_host,
+    validate_llm_endpoint,
     validate_server_url,
 )
 
@@ -36,6 +39,43 @@ class WindowsGuiInstallerTests(unittest.TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_server_url(value)
+
+    def test_llm_endpoint_accepts_blank_or_valid_http_urls(self):
+        self.assertEqual(validate_llm_endpoint(""), "")
+        self.assertEqual(
+            validate_llm_endpoint(" http://192.168.1.25:11434 "),
+            "http://192.168.1.25:11434",
+        )
+        self.assertEqual(
+            validate_llm_endpoint("https://voicebox.local:8443/v1"),
+            "https://voicebox.local:8443/v1",
+        )
+
+    def test_llm_endpoint_rejects_invalid_urls_and_credentials(self):
+        for value in (
+            "ftp://voicebox.local:11434",
+            "http://user:password@voicebox.local:11434",
+            "http://voicebox.local:0",
+            "http://voicebox.local:invalid",
+            "http://bad host:11434",
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_llm_endpoint(value)
+
+    def test_configure_llm_endpoint_preserves_other_settings_and_blank_choice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings_path = Path(directory) / "data" / "settings.json"
+            settings_path.parent.mkdir()
+            settings_path.write_text('{"llm_model": "local-model"}', encoding="utf-8")
+
+            configure_llm_endpoint(settings_path, "http://192.168.1.25:11434")
+            configured = json.loads(settings_path.read_text(encoding="utf-8"))
+            self.assertEqual(configured["llm_model"], "local-model")
+            self.assertEqual(configured["llm_base_url"], "http://192.168.1.25:11434")
+
+            before_blank_choice = settings_path.read_text(encoding="utf-8")
+            configure_llm_endpoint(settings_path, "")
+            self.assertEqual(settings_path.read_text(encoding="utf-8"), before_blank_choice)
 
     def test_server_host_rejects_loopback_and_wildcard(self):
         for value in ("127.0.0.1", "::1", "0.0.0.0", "localhost", "bad host"):

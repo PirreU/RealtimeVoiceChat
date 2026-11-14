@@ -97,6 +97,7 @@ The installer asks whether this computer will run the AI server or connect as a 
     *   **Windows:** Run `dist\RealTimeVoiceChatInstaller.exe`. To build it from source, run `build_windows_installer.bat`.
     *   **Linux/macOS:** Run `bash install.sh`.
     The standalone Windows client needs no Python installation. The Windows server installer obtains a managed Python runtime, installs the AI dependencies, and installs the Microsoft Visual C++ runtime if needed.
+    During server setup, enter an optional Ollama URL to use a service reachable from this computer (for example, when the server runs in Windows Sandbox). Leave it blank to keep the current setting or use the default local Ollama endpoint.
 
 </details>
 

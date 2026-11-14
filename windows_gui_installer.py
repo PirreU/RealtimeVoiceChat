@@ -113,6 +113,63 @@ def validate_server_url(value: str) -> str:
     return f"https://{host}:{8000 if port is None else port}"
 
 
+def validate_llm_endpoint(value: str) -> str:
+    endpoint = value.strip()
+    if not endpoint:
+        return ""
+    try:
+        parsed = urlsplit(endpoint)
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("Enter a valid HTTP or HTTPS Ollama endpoint without credentials.") from error
+    if (
+        len(endpoint) > 400
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not parsed.hostname
+        or any(character.isspace() for character in endpoint)
+        or (port is not None and not 1 <= port <= 65535)
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("Enter a valid HTTP or HTTPS Ollama endpoint without credentials.")
+    return endpoint
+
+
+def configure_llm_endpoint(settings_path: Path, endpoint: str) -> None:
+    endpoint = validate_llm_endpoint(endpoint)
+    if not endpoint:
+        return
+
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        settings = {}
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Settings file is not valid JSON: {settings_path}") from error
+    if not isinstance(settings, dict):
+        raise ValueError(f"Settings file must contain a JSON object: {settings_path}")
+
+    settings["llm_base_url"] = endpoint
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=settings_path.parent,
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(json.dumps(settings, ensure_ascii=False, indent=2))
+            temporary_file.write("\n")
+        os.replace(temporary_path, settings_path)
+    except OSError:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise
+
+
 def create_server_desktop_shortcut(destination: Path) -> Path:
     python_executable = destination / "venv" / "Scripts" / "python.exe"
     code_directory = destination / "code"
@@ -181,6 +238,7 @@ class InstallerApp:
         self.install_dir = tk.StringVar(
             value=str(Path(os.environ["LOCALAPPDATA"]) / "Programs" / APP_DIR_NAME)
         )
+        self.llm_endpoint = tk.StringVar()
         self.server_url = tk.StringVar()
         self.trusted_ca = tk.BooleanVar(value=False)
         self.last_token = ""
@@ -216,16 +274,22 @@ class InstallerApp:
 
         self.server_frame = ttk.LabelFrame(root, text="Server setup")
         ttk.Label(self.server_frame, text="Server LAN IP address or hostname:").grid(
-            row=0, column=0, sticky="w", padx=8, pady=(6, 3)
+            row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(6, 3)
         )
         ttk.Entry(self.server_frame, textvariable=self.host).grid(
-            row=1, column=0, sticky="ew", padx=8, pady=(0, 5)
+            row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 5)
+        )
+        ttk.Label(self.server_frame, text="Ollama URL (blank keeps current/default):").grid(
+            row=2, column=0, sticky="w", padx=8, pady=(0, 5)
+        )
+        ttk.Entry(self.server_frame, textvariable=self.llm_endpoint).grid(
+            row=2, column=1, sticky="ew", padx=(0, 8), pady=(0, 5)
         )
         ttk.Label(self.server_frame, text="Install folder:").grid(
-            row=2, column=0, sticky="w", padx=8, pady=(0, 3)
+            row=3, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 3)
         )
         path_row = ttk.Frame(self.server_frame)
-        path_row.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 5))
+        path_row.grid(row=4, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 5))
         ttk.Entry(path_row, textvariable=self.install_dir).pack(side="left", fill="x", expand=True)
         ttk.Button(path_row, text="Browse...", command=self._browse_folder).pack(side="left", padx=(8, 0))
         ttk.Label(
@@ -235,8 +299,8 @@ class InstallerApp:
                 "This requires an internet connection and several GB of free disk space."
             ),
             wraplength=wraplength,
-        ).grid(row=4, column=0, sticky="w", padx=8, pady=(0, 6))
-        self.server_frame.columnconfigure(0, weight=1)
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 6))
+        self.server_frame.columnconfigure(1, weight=1)
 
         self.client_frame = ttk.LabelFrame(root, text="Client setup")
         ttk.Label(
@@ -310,6 +374,7 @@ class InstallerApp:
             return
         try:
             host = validate_lan_host(self.host.get())
+            llm_endpoint = validate_llm_endpoint(self.llm_endpoint.get())
             destination = Path(self.install_dir.get()).expanduser()
             if not destination.is_absolute():
                 raise ValueError("Choose an absolute installation folder path.")
@@ -331,7 +396,7 @@ class InstallerApp:
         self._append_log("Starting server installation. Keep this window open.")
         threading.Thread(
             target=self._install_server,
-            args=(host, destination),
+            args=(host, destination, llm_endpoint),
             daemon=True,
         ).start()
 
@@ -353,7 +418,7 @@ class InstallerApp:
             return
         self.status.set(f"Opened {server_url}. Enter the server access token when prompted.")
 
-    def _install_server(self, host: str, destination: Path) -> None:
+    def _install_server(self, host: str, destination: Path, llm_endpoint: str) -> None:
         try:
             destination.mkdir(parents=True, exist_ok=True)
             marker = destination / ".rvchat-installer.json"
@@ -373,6 +438,12 @@ class InstallerApp:
                 dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns("__pycache__", "test_*.py", "data"),
             )
+            if llm_endpoint:
+                configure_llm_endpoint(
+                    destination / "code" / "data" / "settings.json",
+                    llm_endpoint,
+                )
+                self._append_log(f"Saved Ollama endpoint: {llm_endpoint}")
             for filename in ("setup.py", "requirements.txt"):
                 shutil.copy2(resources / filename, destination / filename)
 
@@ -438,7 +509,10 @@ class InstallerApp:
             self._run_command(
                 [
                     str(python_executable), "-c",
-                    "from TTS.tts.layers.xtts.stream_generator import NewGenerationMixin",
+                    "from transformers import BeamSearchScorer, PreTrainedModel; "
+                    "from TTS.tts.layers.xtts.stream_generator import NewGenerationMixin; "
+                    "assert hasattr(PreTrainedModel, '_validate_model_class'), "
+                    "'Transformers is incompatible with Coqui XTTS generation'",
                 ],
                 destination,
                 environment,
